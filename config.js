@@ -10,5 +10,5 @@ export const firebaseConfig = {
 };
 
 // İlk anonim girişten sonra kendi UID'ni buraya yazacağız.
-export const ADMIN_UID = 'YONETICI_UID_BURAYA';
+export const ADMIN_UID = 'MUxQ8O20qXa5DzWB7LTMMjilJ0Y2';
 export const DEFAULT_GROUP_CODE = 'BARBAROS26';
