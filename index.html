@@ -29,7 +29,7 @@
       <div class="header-left">
         <h2>FUTBOLBARBAROS</h2>
         <div class="league-selector-wrapper">
-          <select id="leagueSelect"></select>
+          <select id="leagueSelect" style="padding: 6px 12px; border-radius: 6px; background: rgba(255,255,255,0.1); color: inherit; border: 1px solid rgba(255,255,255,0.2); font-weight: bold; cursor: pointer;"></select>
         </div>
       </div>
       <div class="header-right">
@@ -127,6 +127,7 @@
     <form id="predictionForm" class="card modal-card">
       <h3 id="predictionTitle">Maç Tahmini</h3>
       <p id="predictionKickoff" class="match-meta"></p>
+      <div id="modalPredictionWarning" style="font-size: 0.85rem; color: #f59e0b; background: rgba(245, 158, 11, 0.1); padding: 8px; border-radius: 4px; margin-bottom: 10px; display: none;"></div>
       <div class="prediction-inputs">
         <label>Ev Sahibi<input type="number" id="homePrediction" min="0" max="30" required></label>
         <span class="vs">-</span>
