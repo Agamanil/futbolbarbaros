@@ -83,19 +83,38 @@
           <span class="admin-tag">YÖNETİCİ</span>
         </div>
 
-        <form id="scheduleForm" class="admin-form">
-          <h3>Tahmin takvimi</h3>
-          <p class="muted">Bütün maçların tahmin açılış ve kapanış saatini buradan yönet.</p>
-          <label>Tahminlerin açılacağı tarih ve saat
-            <input id="predictionOpenAt" type="datetime-local" required>
-          </label>
-          <label>Tahminlerin kapanacağı tarih ve saat
-            <input id="predictionCloseAt" type="datetime-local" required>
-          </label>
-          <button class="primary" type="submit">Tahmin takvimini kaydet</button>
-          <p id="scheduleMessage" class="message" role="status"></p>
-          <div class="fineprint">Saatler Türkiye saatiyle (UTC+3) değerlendirilir.</div>
-        </form>
+       <form id="matchForm" class="admin-form">
+  <h3>Yeni maç ekle</h3>
+
+  <div class="two-col">
+    <label>Ev sahibi
+      <input id="homeTeam" required placeholder="Beşiktaş">
+    </label>
+    <label>Deplasman
+      <input id="awayTeam" required placeholder="Galatasaray">
+    </label>
+  </div>
+
+  <div class="two-col">
+    <label>Maç tarihi ve saati
+      <input id="kickoff" type="datetime-local" required>
+    </label>
+    <label>Organizasyon
+      <input id="competition" placeholder="Süper Lig">
+    </label>
+  </div>
+
+  <label>Tahminlerin açılacağı tarih ve saat
+    <input id="predictionOpenAt" type="datetime-local" required>
+  </label>
+
+  <label>Tahminlerin kapanacağı tarih ve saat
+    <input id="predictionCloseAt" type="datetime-local" required>
+  </label>
+
+  <button class="primary" type="submit">Maçı fikstüre ekle +</button>
+  <p id="matchFormMessage" class="message" role="status"></p>
+</form>
 
         <form id="matchForm" class="admin-form">
           <h3>Yeni maç ekle</h3>
