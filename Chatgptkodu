@@ -1,0 +1,191 @@
+// FUTBOLBARBAROS Firebase web config
+export const firebaseConfig = {
+  apiKey: 'AIzaSyCNpVWp9mughfYhzxV-93xaJ8O7rr_SOGY',
+  authDomain: 'futbolbarbarosdenemesi.firebaseapp.com',
+  projectId: 'futbolbarbarosdenemesi',
+  storageBucket: 'futbolbarbarosdenemesi.firebasestorage.app',
+  messagingSenderId: '717015885345',
+  appId: '1:717015885345:web:8bfa6ac8c43152d440e560',
+  measurementId: 'G-60V1Y1ZXGP'
+};
+
+// İlk anonim girişten sonra kendi UID'ni buraya yazacağız.
+export const ADMIN_UID = 'YONETICI_UID_BURAYA';
+export const DEFAULT_GROUP_CODE = 'BARBAROS26';
+
+// Bu dosyayı config.js olarak kopyalayıp Firebase Console'dan aldığın değerleri gir.
+export const firebaseConfig = {
+  apiKey: 'BURAYA_API_KEY',
+  authDomain: 'PROJE_ID.firebaseapp.com',
+  projectId: 'PROJE_ID',
+  storageBucket: 'PROJE_ID.appspot.com',
+  messagingSenderId: 'SENDER_ID',
+  appId: 'APP_ID'
+};
+// İlk kez giriş yaptıktan sonra tarayıcı konsolundan auth.currentUser.uid öğrenilip buraya yazılacak.
+// Gerçek güvenlik Firestore kurallarıyla sağlanır; bu değer tek başına güvenlik değildir.
+export const ADMIN_UID = 'YONETICI_UID_BURAYA';
+export const DEFAULT_GROUP_CODE = 'BARBAROS26';
+
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b2f20"><title>FUTBOLBARBAROS</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="pitch-lines" aria-hidden="true"></div>
+  <header class="topbar"><a class="brand" href="#"><span class="ball">⚽</span> FUTBOL<span>BARBAROS</span></a><div id="userBadge" class="user-badge hidden"></div></header>
+  <main>
+    <section id="entryView" class="panel entry-panel">
+      <div class="eyebrow">ARKADAŞLARINA ÖZEL TAHMİN LİGİ</div>
+      <h1>Maçın heyecanı,<br><em>tahminin rekabeti.</em></h1>
+      <p class="muted">Grup kodunu ve oyuncu adını gir, lige katıl.</p>
+      <form id="joinForm" class="stack">
+        <label>Grup kodu<input id="groupCode" required maxlength="24" placeholder="Örn. BARBAROS26" autocomplete="off"></label>
+        <label>Oyuncu adı<input id="playerName" required maxlength="18" placeholder="Örn. Anıl" autocomplete="nickname"></label>
+        <button class="primary" type="submit">Lige katıl <span>→</span></button>
+      </form>
+      <p id="entryMessage" class="message" role="status"></p>
+      <div class="fineprint">Bir cihazda tek oyuncu profili · Tahminler maç başlayınca kilitlenir</div>
+    </section>
+
+    <section id="appView" class="hidden">
+      <div class="welcome-row"><div><div class="eyebrow">FUTBOLBARBAROS LİGİ</div><h1>Hoş geldin, <em id="welcomeName">Oyuncu</em></h1></div><div class="round-chip">SEZON 01</div></div>
+      <nav class="tabs"><button class="tab active" data-tab="matches">Maçlar</button><button class="tab" data-tab="table">Puan durumu</button><button class="tab admin-only hidden" data-tab="admin">Yönetici</button></nav>
+      <section id="matchesTab" class="tab-content"><div class="section-heading"><div><div class="eyebrow">TAKVİM & TAHMİNLER</div><h2>Yaklaşan maçlar</h2></div><span id="matchCount" class="count">0 MAÇ</span></div><div id="matchesList" class="matches-list"><div class="empty">Henüz maç eklenmedi. Yönetici fikstürü hazırlıyor.</div></div></section>
+      <section id="tableTab" class="tab-content hidden"><div class="section-heading"><div><div class="eyebrow">REKABET KIZIŞIYOR</div><h2>Lig tablosu</h2></div><span class="count">GENEL SIRALAMA</span></div><div class="table-wrap"><table><thead><tr><th>#</th><th>Oyuncu</th><th>O</th><th>PUAN</th></tr></thead><tbody id="leaderboard"><tr><td colspan="4" class="empty">Henüz puan yok.</td></tr></tbody></table></div><p class="scoring-note">Tam skor: <b>3 puan</b> · Doğru maç sonucu: <b>1 puan</b></p></section>
+      <section id="adminTab" class="tab-content hidden"><div class="section-heading"><div><div class="eyebrow">KONTROL MERKEZİ</div><h2>Yönetici paneli</h2></div><span class="admin-tag">YÖNETİCİ</span></div><form id="matchForm" class="admin-form"><h3>Yeni maç ekle</h3><div class="two-col"><label>Ev sahibi<input id="homeTeam" required placeholder="Beşiktaş"></label><label>Deplasman<input id="awayTeam" required placeholder="Galatasaray"></label></div><div class="two-col"><label>Tarih ve saat<input id="kickoff" type="datetime-local" required></label><label>Organizasyon<input id="competition" placeholder="Süper Lig"></label></div><button class="primary" type="submit">Maçı fikstüre ekle +</button></form><div class="admin-list"><h3>Maç sonuçlarını yönet</h3><div id="adminMatches" class="matches-list"><div class="empty">Henüz maç yok.</div></div></div><div class="admin-warning">Yönetici yetkisi Firebase UID üzerinden korunur. Kurulum tamamlanmadan bu paneli gerçek yönetici güvenliği varmış gibi kullanma.</div></section>
+      <button id="leaveButton" class="text-button">Bu cihazdaki oyuncu oturumunu sıfırla</button>
+    </section>
+  </main>
+  <footer>FUTBOLBARBAROS <span>·</span> SADECE ARKADAŞLAR ARASINDA</footer>
+  <dialog id="predictionDialog"><form method="dialog" id="predictionForm"><button class="close" aria-label="Kapat">×</button><div class="eyebrow">SKOR TAHMİNİN</div><h2 id="predictionTitle">Maç</h2><p class="muted" id="predictionKickoff"></p><div class="score-inputs"><label>Ev sahibi<input id="homePrediction" type="number" min="0" max="30" required></label><span>:</span><label>Deplasman<input id="awayPrediction" type="number" min="0" max="30" required></label></div><p class="fineprint">Başlama saatinde tahmin kilitlenir. Tam skor 3, doğru sonuç 1 puan.</p><button class="primary" type="submit">Tahmini kaydet</button><p id="predictionMessage" class="message"></p></form></dialog>
+  <script type="module" src="app.js"></script>
+</body></html>
+
+@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800;900&family=DM+Sans:wght@400;500;600;700&display=swap');
+:root{--bg:#071b13;--panel:#0d2b1e;--panel2:#123927;--green:#b7f36b;--green2:#79c84b;--white:#f3f7ef;--muted:#a6b9aa;--line:#28523a;--red:#ff827b}*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(ellipse at 50% -15%,#1c5735 0,transparent 48%),var(--bg);color:var(--white);font-family:'DM Sans',sans-serif;position:relative;overflow-x:hidden}.pitch-lines{position:fixed;inset:0;pointer-events:none;opacity:.12;background-image:linear-gradient(90deg,transparent 49.8%,#8dd65e 50%,transparent 50.2%),linear-gradient(0deg,transparent 49.8%,#8dd65e 50%,transparent 50.2%);background-size:100% 100%;mask-image:linear-gradient(to bottom,black,transparent 75%)}.topbar,main,footer{position:relative;z-index:1}.topbar{height:76px;border-bottom:1px solid #ffffff16;display:flex;align-items:center;justify-content:space-between;padding:0 max(22px,calc((100% - 1050px)/2))}.brand{text-decoration:none;color:white;font:800 23px 'Barlow Condensed',sans-serif;letter-spacing:1.4px}.brand span:last-child{color:var(--green)}.ball{margin-right:8px}.user-badge{font-size:12px;color:var(--green);border:1px solid var(--line);padding:8px 12px;border-radius:30px}main{width:min(920px,calc(100% - 32px));margin:54px auto 80px}.panel{background:linear-gradient(145deg,#103a27,#0a2419);border:1px solid #ffffff1c;border-radius:22px;box-shadow:0 25px 80px #0005}.entry-panel{max-width:520px;margin:6vh auto;padding:38px}.eyebrow{font-size:10px;font-weight:700;letter-spacing:2px;color:var(--green);margin-bottom:12px}h1,h2,h3,p{margin-top:0}h1{font:800 clamp(38px,7vw,58px)/.98 'Barlow Condensed',sans-serif;letter-spacing:.3px;margin-bottom:16px}h1 em{font-style:normal;color:var(--green)}h2{font:700 32px 'Barlow Condensed',sans-serif;margin-bottom:0}h3{font:700 21px 'Barlow Condensed',sans-serif}.muted{color:var(--muted);font-size:14px}.stack{display:grid;gap:16px;margin-top:26px}label{display:grid;gap:8px;font-size:12px;color:#c6d7c9;font-weight:600}input{width:100%;border:1px solid #315b41;background:#071e14;color:white;padding:13px 14px;border-radius:10px;font:500 14px 'DM Sans',sans-serif;outline:none}input:focus{border-color:var(--green);box-shadow:0 0 0 3px #b7f36b18}.primary{border:0;border-radius:10px;padding:14px 17px;background:var(--green);color:#102315;font-weight:800;font-size:14px;cursor:pointer;transition:.18s}.primary:hover{background:#cdfb91;transform:translateY(-1px)}.primary span{float:right;font-size:18px;line-height:14px}.fineprint{font-size:10px;color:#82998a;line-height:1.6;margin-top:18px}.message{font-size:12px;min-height:16px;color:var(--red);margin:10px 0 0}.hidden{display:none!important}.welcome-row{display:flex;justify-content:space-between;align-items:end;margin-bottom:28px}.welcome-row h1{font-size:46px;margin:0}.round-chip,.count,.admin-tag{font-size:10px;letter-spacing:1.4px;color:var(--green);border:1px solid var(--line);border-radius:30px;padding:8px 11px}.tabs{display:flex;gap:7px;border-bottom:1px solid #ffffff1c;margin-bottom:28px}.tab{background:none;border:0;color:#9eb2a2;padding:13px 17px;font-weight:700;cursor:pointer;border-bottom:2px solid transparent}.tab.active{color:var(--green);border-color:var(--green)}.section-heading{display:flex;justify-content:space-between;align-items:end;margin-bottom:18px}.section-heading .eyebrow{margin-bottom:5px}.matches-list{display:grid;gap:12px}.match-card{background:linear-gradient(120deg,#103522,#0c291c);border:1px solid #ffffff18;border-radius:15px;padding:18px;display:grid;grid-template-columns:1fr auto;gap:14px;align-items:center}.match-meta{font-size:10px;color:#9db3a2;margin-bottom:12px}.teams{display:flex;align-items:center;gap:12px;font:700 22px 'Barlow Condensed',sans-serif}.vs{color:#6d8a75;font-size:12px}.match-actions{display:flex;align-items:center;gap:9px}.small-btn{border:1px solid #47754f;background:#173f29;color:var(--green);border-radius:8px;padding:10px 12px;font-weight:700;cursor:pointer}.small-btn:disabled{opacity:.5;cursor:not-allowed}.prediction-label{font-size:11px;color:#b7d4bd;text-align:right}.empty{padding:26px;text-align:center;color:#8fa494;background:#0b2519;border:1px dashed #315a3e;border-radius:13px;font-size:13px}.table-wrap{overflow:auto;border:1px solid #ffffff18;border-radius:14px}table{width:100%;border-collapse:collapse;text-align:left}th{font-size:10px;letter-spacing:1px;color:#8fa895;background:#102f20;padding:14px}td{padding:15px 14px;border-top:1px solid #ffffff12;font-size:13px}td:last-child{color:var(--green);font-weight:800}.scoring-note{font-size:12px;color:#a7b9aa;margin-top:14px}.scoring-note b{color:var(--green)}.admin-form{padding:20px;background:#0d2c1e;border:1px solid #ffffff1a;border-radius:14px;display:grid;gap:16px}.two-col{display:grid;grid-template-columns:1fr 1fr;gap:12px}.admin-list{margin-top:28px}.admin-list h3{margin-bottom:14px}.admin-warning{font-size:11px;line-height:1.6;color:#f0c58a;background:#4a351c55;border:1px solid #806032;border-radius:10px;padding:12px;margin-top:20px}.text-button{display:block;margin:28px auto 0;background:none;border:0;color:#8ca393;text-decoration:underline;font-size:11px;cursor:pointer}footer{text-align:center;color:#66816e;font:700 10px 'DM Sans',sans-serif;letter-spacing:2px;padding:20px 0 30px}footer span{color:var(--green)}dialog{background:#0d2b1e;color:white;border:1px solid #47754f;border-radius:18px;width:min(420px,calc(100% - 28px));padding:28px;box-shadow:0 30px 100px #000b}dialog::backdrop{background:#000b;backdrop-filter:blur(5px)}dialog h2{margin-bottom:4px}.close{float:right;border:0;background:none;color:#b6c7b9;font-size:28px;cursor:pointer}.score-inputs{display:grid;grid-template-columns:1fr auto 1fr;align-items:end;gap:15px;margin:25px 0}.score-inputs span{font:700 26px 'Barlow Condensed';padding-bottom:8px;color:var(--green)}.score-inputs input{text-align:center;font-size:22px;font-weight:800}.score-inputs+.fineprint{margin-bottom:20px}@media(max-width:600px){main{margin-top:32px}.entry-panel{padding:26px 22px}.welcome-row{align-items:start;gap:12px}.welcome-row h1{font-size:38px}.round-chip{font-size:8px}.match-card{grid-template-columns:1fr}.match-actions{justify-content:space-between}.teams{font-size:20px}.two-col{grid-template-columns:1fr}.tab{padding:12px 11px;font-size:12px}.section-heading h2{font-size:28px}}
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function isMember(groupId) {
+      return signedIn() && exists(/databases/$(database)/documents/groups/$(groupId)/players/$(request.auth.uid));
+    }
+    function isAdmin() {
+      return signedIn() && request.auth.uid == 'YONETICI_UID_BURAYA';
+    }
+
+    match /groups/{groupId} {
+      // Grup kodunu bilen oturum açmış kullanıcı, katılabilmek için grup belgesini okuyabilir.
+      allow get: if signedIn();
+      allow list: if isAdmin();
+      allow create, update, delete: if isAdmin();
+
+      match /players/{playerId} {
+        allow read: if isMember(groupId) || isAdmin();
+        allow create: if signedIn() && playerId == request.auth.uid
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.keys().hasOnly(['name', 'uid', 'joinedAt', 'points'])
+          && request.resource.data.name is string
+          && request.resource.data.name.size() >= 2
+          && request.resource.data.name.size() <= 18
+          && exists(/databases/$(database)/documents/groups/$(groupId));
+        allow update, delete: if isAdmin();
+      }
+
+      match /matches/{matchId} {
+        allow read: if isMember(groupId) || isAdmin();
+        allow create, delete: if isAdmin();
+        allow update: if isAdmin() || (
+          isMember(groupId)
+          && request.time < resource.data.kickoff
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['predictions'])
+          && request.resource.data.predictions.diff(resource.data.predictions).affectedKeys().hasOnly([request.auth.uid])
+          && request.resource.data.predictions[request.auth.uid].keys().hasOnly(['home', 'away', 'playerName', 'updatedAt'])
+          && request.resource.data.predictions[request.auth.uid].home is int
+          && request.resource.data.predictions[request.auth.uid].away is int
+          && request.resource.data.predictions[request.auth.uid].home >= 0
+          && request.resource.data.predictions[request.auth.uid].home <= 30
+          && request.resource.data.predictions[request.auth.uid].away >= 0
+          && request.resource.data.predictions[request.auth.uid].away <= 30
+        );
+      }
+    }
+  }
+}
+
+# FUTBOLBARBAROS
+
+Arkadaş grubuna özel futbol tahmin ligi. Arayüz + Firebase Firestore başlangıç projesi.
+
+## Şu an neler var?
+- Yeşil saha temalı, mobil uyumlu arayüz
+- Grup kodu ve oyuncu adıyla katılım
+- Anonim Firebase Authentication ile cihaz başına kalıcı UID
+- Maç ekleme ve maç başlamadan skor tahmini
+- Başlama saatinde tahmin kilidi
+- 3 puan tam skor / 1 puan doğru maç sonucu
+- Puan tablosu ve yönetici maç sonucu girişi
+
+## Önemli güvenlik notu
+Tarayıcıdaki anonim UID, aynı fiziksel cihazı kusursuz biçimde tanımlamaz. Tarayıcı verisi silinirse veya başka tarayıcı/cihaz kullanılırsa yeni UID üretilebilir. 5-10 kişilik arkadaş grubu için caydırıcı bir ilk sürümdür; kesin kişi doğrulaması değildir. Gerçek yönetici güvenliği Firestore Security Rules ile sağlanır. Yönetici UID'sini hem `config.js` hem `firestore.rules` içine yazmadan yayına almayın.
+
+## Kurulum (ücretsiz katmanla)
+1. Firebase Console'da yeni proje oluştur.
+2. Build > Authentication > Sign-in method bölümünden **Anonymous** girişini etkinleştir.
+3. Build > Firestore Database bölümünden veritabanı oluştur.
+4. Proje ayarlarından Web App ekle ve Firebase config değerlerini al.
+5. Bu paketteki `config.js` dosyasında Firebase web yapılandırması doldurulmuştur. `ADMIN_UID` alanını ilk girişten sonra kendi UID'nle değiştireceksin.
+6. `index.html`, `style.css`, `app.js`, `config.js` dosyalarını bir statik hosting alanına yükle (ör. GitHub Pages).
+7. Siteyi ilk kez açıp grup kodu ve ad girmeden önce Firebase Authentication > Users bölümünden kendi anonim UID'ni al. `config.js` içindeki `ADMIN_UID` alanına yaz. Ardından siteyi yeniden yükle.
+8. `firestore.rules` içindeki `YONETICI_UID_BURAYA` değerini aynı UID ile değiştir ve Firestore Rules bölümünde yayımla.
+9. Firestore'da `groups/BARBAROS26` belgesini oluştur. Örnek alanlar: `{ "name": "FUTBOLBARBAROS", "createdBy": "YONETICI_UID" }`. Sonra oyuncular bu kodla katılabilir.
+10. Siteye girip grup kodu olarak `BARBAROS26` yaz. Arkadaşların da aynı kodla katılabilir.
+
+## Yönetici UID'sini bulma
+Firebase Console > Authentication > Users. İlk anonim girişten sonra kendi kullanıcının UID sütununu kopyala.
+
+## Geliştirme notu
+Bu bir başlangıç sürümüdür. Yönetici ilk kurulumda grup belgesini Firebase Console'dan oluşturur. Üretim yayını öncesinde grup kodu deneme sınırı, kullanıcı adı değişmezliği, yarış koşullarına karşı tahmin kilidi ve yönetici işlemleri için ek sunucu doğrulaması eklenmesi önerilir.
+
+// FUTBOLBARBAROS - Firebase bağlantısı kurulduğunda ortak çevrimiçi veri kullanır.
+// İlk kurulum için config.js dosyasını doldurun.
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/13.2.0/firebase-app.js';
+import { getAuth, signInAnonymously, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/13.2.0/firebase-auth.js';
+import { getFirestore, doc, getDoc, setDoc, collection, addDoc, getDocs, query, orderBy, onSnapshot, updateDoc, serverTimestamp, Timestamp } from 'https://www.gstatic.com/firebasejs/13.2.0/firebase-firestore.js';
+import { firebaseConfig, ADMIN_UID, DEFAULT_GROUP_CODE } from './config.js';
+
+const $ = id => document.getElementById(id);
+const hasConfig = firebaseConfig && firebaseConfig.apiKey && firebaseConfig.projectId;
+let auth, db, uid, player = null, groupCode = '', matches = [], players = [], activeMatch = null, unsubMatches, unsubPlayers;
+const entryView=$('entryView'), appView=$('appView');
+function message(el,text,isError=true){el.textContent=text;el.style.color=isError?'var(--red)':'var(--green)'}
+function dateText(value){const d=value?.toDate?value.toDate():new Date(value);return d.toLocaleString('tr-TR',{dateStyle:'medium',timeStyle:'short'})}
+function isLocked(m){const kickoff=m.kickoff?.toDate?m.kickoff.toDate():new Date(m.kickoff);return Date.now()>=kickoff.getTime()}
+function safe(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function showApp(){entryView.classList.add('hidden');appView.classList.remove('hidden');$('userBadge').textContent=player.name;$('userBadge').classList.remove('hidden');$('welcomeName').textContent=player.name;document.querySelectorAll('.admin-only').forEach(x=>x.classList.toggle('hidden',uid!==ADMIN_UID));}
+function showEntry(){appView.classList.add('hidden');entryView.classList.remove('hidden')}
+async function boot(){if(!hasConfig){message($('entryMessage'),'Kurulum eksik: config.js içine Firebase ayarları eklenmeli. README dosyasına bak.',true);return}
+ const app=initializeApp(firebaseConfig);auth=getAuth(app);db=getFirestore(app);
+ await signInAnonymously(auth);
+ onAuthStateChanged(auth,async user=>{if(!user)return;uid=user.uid;const saved=localStorage.getItem('fb_player');if(saved){try{const p=JSON.parse(saved);const snap=await getDoc(doc(db,'groups',p.groupCode,'players',uid));if(snap.exists()){player=snap.data();groupCode=p.groupCode;showApp();listen();return}else localStorage.removeItem('fb_player')}catch(e){console.error(e)}}});
+}
+$('joinForm').addEventListener('submit',async e=>{e.preventDefault();if(!db)return message($('entryMessage'),'Önce Firebase kurulumu tamamlanmalı.');const code=$('groupCode').value.trim().toUpperCase(),name=$('playerName').value.trim();if(!code||!name)return;
+ try{const g=await getDoc(doc(db,'groups',code));if(!g.exists())throw Error('Bu grup koduyla bir lig bulunamadı. Kodu yöneticinden kontrol et.');const ref=doc(db,'groups',code,'players',uid),existing=await getDoc(ref);if(existing.exists()&&existing.data().name!==name)throw Error('Bu cihaz başka bir oyuncu adına kayıtlı.');if(!existing.exists()){const all=await getDocs(collection(db,'groups',code,'players'));if(all.docs.some(d=>d.data().name.toLowerCase()===name.toLowerCase()))throw Error('Bu oyuncu adı zaten kullanılıyor.');await setDoc(ref,{name,uid,joinedAt:serverTimestamp(),points:0});}player={name,uid};groupCode=code;localStorage.setItem('fb_player',JSON.stringify({groupCode:code}));showApp();listen();}catch(err){message($('entryMessage'),err.message||'Giriş yapılamadı.');}
+});
+function listen(){if(unsubMatches)unsubMatches();if(unsubPlayers)unsubPlayers();unsubMatches=onSnapshot(query(collection(db,'groups',groupCode,'matches'),orderBy('kickoff','asc')),s=>{matches=s.docs.map(d=>({id:d.id,...d.data()}));renderMatches();renderAdminMatches();});unsubPlayers=onSnapshot(collection(db,'groups',groupCode,'players'),s=>{players=s.docs.map(d=>({id:d.id,...d.data()}));renderTable();});}
+function predictionFor(m){return m.predictions?.[uid]}
+function renderMatches(){ $('matchCount').textContent=`${matches.length} MAÇ`;const el=$('matchesList');if(!matches.length){el.innerHTML='<div class="empty">Henüz maç eklenmedi. Yönetici fikstürü hazırlıyor.</div>';return;}el.innerHTML=matches.map(m=>{const p=predictionFor(m),locked=isLocked(m),result=m.homeScore!==undefined;return `<article class="match-card"><div><div class="match-meta">${safe(m.competition||'FUTBOL')} · ${dateText(m.kickoff)} ${locked?'· KİLİTLİ':''}</div><div class="teams"><span>${safe(m.homeTeam)}</span><span class="vs">VS</span><span>${safe(m.awayTeam)}</span></div></div><div class="match-actions"><div class="prediction-label">${p?`Tahminin: <b>${p.home}-${p.away}</b>`:'Henüz tahmin yok'}${result?`<br>Sonuç: <b>${m.homeScore}-${m.awayScore}</b>`:''}</div><button class="small-btn" data-predict="${m.id}" ${locked?'disabled':''}>${locked?'Kilitli':p?'Düzenle':'Tahmin et'}</button></div></article>`}).join('');el.querySelectorAll('[data-predict]').forEach(b=>b.addEventListener('click',()=>openPrediction(b.dataset.predict)));}
+function openPrediction(id){activeMatch=matches.find(m=>m.id===id);if(!activeMatch||isLocked(activeMatch))return;const p=predictionFor(activeMatch);$('predictionTitle').textContent=`${activeMatch.homeTeam} - ${activeMatch.awayTeam}`;$('predictionKickoff').textContent=dateText(activeMatch.kickoff);$('homePrediction').value=p?.home??'';$('awayPrediction').value=p?.away??'';message($('predictionMessage'),'');$('predictionDialog').showModal();}
+$('predictionForm').addEventListener('submit',async e=>{e.preventDefault();if(!activeMatch||isLocked(activeMatch))return message($('predictionMessage'),'Maç başladı, tahmin kapandı.');const h=Number($('homePrediction').value),a=Number($('awayPrediction').value);if(!Number.isInteger(h)||!Number.isInteger(a)||h<0||a<0||h>30||a>30)return message($('predictionMessage'),'0 ile 30 arasında tam sayı gir.');try{const ref=doc(db,'groups',groupCode,'matches',activeMatch.id);await updateDoc(ref,{[`predictions.${uid}`]:{home:h,away:a,playerName:player.name,updatedAt:Date.now()}});$('predictionDialog').close();}catch(err){message($('predictionMessage'),'Tahmin kaydedilemedi.');}});
+function pointsFor(m,p){if(m.homeScore===undefined||m.awayScore===undefined||!p)return 0;if(p.home===m.homeScore&&p.away===m.awayScore)return 3;const actual=Math.sign(m.homeScore-m.awayScore),guess=Math.sign(p.home-p.away);return actual===guess?1:0;}
+function renderTable(){const totals=players.map(p=>{let pts=0,played=0;for(const m of matches){const pred=m.predictions?.[p.id];if(m.homeScore!==undefined&&m.awayScore!==undefined){played++;pts+=pointsFor(m,pred)}}return {...p,pts,played}}).sort((a,b)=>b.pts-a.pts||a.name.localeCompare(b.name,'tr'));$('leaderboard').innerHTML=totals.length?totals.map((p,i)=>`<tr><td>${i+1}</td><td>${safe(p.name)}${p.id===uid?' <span style="color:var(--green)">(Sen)</span>':''}</td><td>${p.played}</td><td>${p.pts}</td></tr>`).join(''):'<tr><td colspan="4" class="empty">Henüz oyuncu yok.</td></tr>';}
+$('matchForm').addEventListener('submit',async e=>{e.preventDefault();if(uid!==ADMIN_UID)return alert('Yönetici yetkisi yok.');const kickoff=new Date($('kickoff').value);if(!Number.isFinite(kickoff.getTime())||kickoff<=new Date())return alert('Maç tarihi gelecekte olmalı.');try{await addDoc(collection(db,'groups',groupCode,'matches'),{homeTeam:$('homeTeam').value.trim(),awayTeam:$('awayTeam').value.trim(),competition:$('competition').value.trim()||'Futbol',kickoff:Timestamp.fromDate(kickoff),createdAt:serverTimestamp(),createdBy:uid,predictions:{}});e.target.reset();}catch(err){alert('Maç eklenemedi: '+err.message)}});
+function renderAdminMatches(){const el=$('adminMatches');if(!matches.length){el.innerHTML='<div class="empty">Henüz maç yok.</div>';return;}el.innerHTML=matches.map(m=>`<article class="match-card"><div><div class="match-meta">${dateText(m.kickoff)}</div><div class="teams"><span>${safe(m.homeTeam)}</span><span class="vs">VS</span><span>${safe(m.awayTeam)}</span></div></div><div class="match-actions">${m.homeScore!==undefined?`<b>${m.homeScore} - ${m.awayScore}</b>`:`<input aria-label="Ev sahibi skoru" id="h-${m.id}" type="number" min="0" placeholder="Ev" style="width:62px"><input aria-label="Deplasman skoru" id="a-${m.id}" type="number" min="0" placeholder="Dep" style="width:62px"><button class="small-btn" data-result="${m.id}">Sonucu kaydet</button>`}</div></article>`).join('');el.querySelectorAll('[data-result]').forEach(b=>b.addEventListener('click',async()=>{const id=b.dataset.result,m=matches.find(x=>x.id===id),h=Number($(`h-${id}`).value),a=Number($(`a-${id}`).value);if(!isLocked(m))return alert('Maç başlamadan sonuç girilemez.');if(!Number.isInteger(h)||!Number.isInteger(a)||h<0||a<0)return alert('İki skoru da gir.');await updateDoc(doc(db,'groups',groupCode,'matches',id),{homeScore:h,awayScore:a,resultAt:serverTimestamp()});}));}
+document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x===b));['matches','table','admin'].forEach(t=>$(`${t}Tab`).classList.toggle('hidden',t!==b.dataset.tab));}));
+$('leaveButton').addEventListener('click',()=>{if(confirm('Bu cihazdaki oyuncu kaydını sıfırlamak istiyor musun? Aynı anonim hesap Firebase tarafında kalır.')){localStorage.removeItem('fb_player');location.reload();}});
+boot().catch(e=>{console.error(e);message($('entryMessage'),'Firebase başlatılamadı. README kurulum adımlarını kontrol et.');});
