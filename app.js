@@ -87,4 +87,7 @@ $('nameForm').addEventListener('submit', async e => {
     message($('nameMessage'), 'İsim değiştirilemedi: ' + err.message);
   }
 });
-boot().catch(e=>{console.error(e);message($('entryMessage'),'Firebase başlatılamadı. README kurulum adımlarını kontrol et.');});
+boot().catch(e=>{
+  console.error(e);
+  message($('entryMessage'),'HATA: '+(e.code || e.message || 'Bilinmeyen hata'),true);
+});
