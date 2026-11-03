@@ -13,7 +13,7 @@ function message(el,text,isError=true){el.textContent=text;el.style.color=isErro
 function dateText(value){const d=value?.toDate?value.toDate():new Date(value);return d.toLocaleString('tr-TR',{dateStyle:'medium',timeStyle:'short'})}
 function isLocked(m){const kickoff=m.kickoff?.toDate?m.kickoff.toDate():new Date(m.kickoff);return Date.now()>=kickoff.getTime()}
 function safe(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
-function showApp(){entryView.classList.add('hidden');appView.classList.remove('hidden');$('userBadge').textContent=player.name;$('userBadge').classList.remove('hidden');$('welcomeName').textContent=player.name;document.querySelectorAll('.admin-only').forEach(x=>x.classList.toggle('hidden',uid!==ADMIN_UID));}
+function showApp(){entryView.classList.add('hidden');appView.classList.remove('hidden');$('userBadge').textContent=player.name+' | UID: '+uid;$('userBadge').classList.remove('hidden');$('welcomeName').textContent=player.name;document.querySelectorAll('.admin-only').forEach(x=>x.classList.toggle('hidden',uid!==ADMIN_UID));}
 function showEntry(){appView.classList.add('hidden');entryView.classList.remove('hidden')}
 async function boot(){if(!hasConfig){message($('entryMessage'),'Kurulum eksik: config.js içine Firebase ayarları eklenmeli. README dosyasına bak.',true);return}
  const app=initializeApp(firebaseConfig);auth=getAuth(app);db=getFirestore(app);
