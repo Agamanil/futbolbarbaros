@@ -34,4 +34,56 @@ $('matchForm').addEventListener('submit',async e=>{e.preventDefault();if(uid!==A
 function renderAdminMatches(){const el=$('adminMatches');if(!matches.length){el.innerHTML='<div class="empty">Henüz maç yok.</div>';return;}el.innerHTML=matches.map(m=>`<article class="match-card"><div><div class="match-meta">${dateText(m.kickoff)}</div><div class="teams"><span>${safe(m.homeTeam)}</span><span class="vs">VS</span><span>${safe(m.awayTeam)}</span></div></div><div class="match-actions">${m.homeScore!==undefined?`<b>${m.homeScore} - ${m.awayScore}</b>`:`<input aria-label="Ev sahibi skoru" id="h-${m.id}" type="number" min="0" placeholder="Ev" style="width:62px"><input aria-label="Deplasman skoru" id="a-${m.id}" type="number" min="0" placeholder="Dep" style="width:62px"><button class="small-btn" data-result="${m.id}">Sonucu kaydet</button>`}</div></article>`).join('');el.querySelectorAll('[data-result]').forEach(b=>b.addEventListener('click',async()=>{const id=b.dataset.result,m=matches.find(x=>x.id===id),h=Number($(`h-${id}`).value),a=Number($(`a-${id}`).value);if(!isLocked(m))return alert('Maç başlamadan sonuç girilemez.');if(!Number.isInteger(h)||!Number.isInteger(a)||h<0||a<0)return alert('İki skoru da gir.');await updateDoc(doc(db,'groups',groupCode,'matches',id),{homeScore:h,awayScore:a,resultAt:serverTimestamp()});}));}
 document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x===b));['matches','table','admin'].forEach(t=>$(`${t}Tab`).classList.toggle('hidden',t!==b.dataset.tab));}));
 $('leaveButton').addEventListener('click',()=>{if(confirm('Bu cihazdaki oyuncu kaydını sıfırlamak istiyor musun? Aynı anonim hesap Firebase tarafında kalır.')){localStorage.removeItem('fb_player');location.reload();}});
+$('editNameButton').addEventListener('click', () => {
+  $('newPlayerName').value = player.name;
+  message($('nameMessage'), '');
+  $('nameDialog').showModal();
+});
+
+$('closeNameDialog').addEventListener('click', () => {
+  $('nameDialog').close();
+});
+
+$('nameForm').addEventListener('submit', async e => {
+  e.preventDefault();
+
+  const newName = $('newPlayerName').value.trim();
+
+  if (newName.length < 2 || newName.length > 18) {
+    return message($('nameMessage'), 'İsim 2-18 karakter arasında olmalı.');
+  }
+
+  if (newName === player.name) {
+    return $('nameDialog').close();
+  }
+
+  try {
+    const all = await getDocs(
+      collection(db, 'groups', groupCode, 'players')
+    );
+
+    const duplicate = all.docs.some(d =>
+      d.id !== uid &&
+      d.data().name.toLowerCase() === newName.toLowerCase()
+    );
+
+    if (duplicate) {
+      return message($('nameMessage'), 'Bu oyuncu adı zaten kullanılıyor.');
+    }
+
+    await updateDoc(
+      doc(db, 'groups', groupCode, 'players', uid),
+      { name: newName }
+    );
+
+    player.name = newName;
+    showApp();
+    renderTable();
+    $('nameDialog').close();
+
+  } catch (err) {
+    console.error(err);
+    message($('nameMessage'), 'İsim değiştirilemedi: ' + err.message);
+  }
+});
 boot().catch(e=>{console.error(e);message($('entryMessage'),'Firebase başlatılamadı. README kurulum adımlarını kontrol et.');});
