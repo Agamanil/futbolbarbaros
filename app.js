@@ -85,7 +85,7 @@ function activateTab(name) {
   ['matches', 'table', 'admin'].forEach(tab => $(`${tab}Tab`).classList.toggle('hidden', tab !== name));
 }
 
-// İki ligde maç takvimi ortaktır; tahminler ise lig belgelerinde ayrı kalır.
+// Yeni maç eklendiğinde veya geçişte senkronizasyon
 async function syncLegacyMatches() {
   if (!isAdmin()) return;
   const source = await getDocs(collection(db, 'groups', groupCode, 'matches'));
@@ -261,7 +261,6 @@ function renderMatches() {
     else if (Date.now() < toDate(m.predictionOpenAt).getTime()) buttonText = 'Henüz açılmadı';
     else if (Date.now() >= toDate(m.predictionCloseAt).getTime()) buttonText = 'Tahmin kapandı';
 
-    // Diğer kullanıcıların tahminleri (Sadece kullanıcı bu maça tahmin yapmışsa gösterilir)
     let othersHtml = '';
     if (p && m.predictions) {
       const otherEntries = Object.entries(m.predictions).filter(([userId]) => userId !== uid);
@@ -311,7 +310,6 @@ function openPrediction(id) {
   $('awayPrediction').value = p?.away ?? '';
   message($('predictionMessage'), '');
   
-  // Dialog içindeki uyarı alanını güncelle
   const modalWarning = $('modalPredictionWarning');
   if (modalWarning) {
     if (!p) {
@@ -445,35 +443,35 @@ document.querySelectorAll('.tab').forEach(button => button.addEventListener('cli
   activateTab(button.dataset.tab);
 }));
 
-/* Eski maçları diğer lige aktar butonu işlevselliği */
+/* Eski maçları diğer lige aktar butonu işlevselliği (BARBAROS26 -> ILOVE12CBRO) */
 const bulkMigrateBtn = $('bulkMigrateBtn');
 if (bulkMigrateBtn) {
   bulkMigrateBtn.addEventListener('click', async () => {
     if (!isAdmin()) return alert('Yönetici yetkisi yok.');
-    const otherLeagues = SHARED_LEAGUES.filter(c => c !== groupCode);
-    if (otherLeagues.length === 0) return alert('Aktarılacak diğer lig bulunamadı.');
-    const targetCode = otherLeagues[0];
+    
+    const sourceLeague = 'BARBAROS26';
+    const targetLeague = 'ILOVE12CBRO';
 
-    if (!confirm(`groups/${groupCode}/matches koleksiyonundaki bütün maçlar groups/${targetCode}/matches koleksiyonuna (tahminler hariç, mevcut maçların üzerine yazılmadan) kopyalanacaktır. Emin misiniz?`)) {
+    if (!confirm(`groups/${sourceLeague}/matches koleksiyonundaki bütün maçlar groups/${targetLeague}/matches koleksiyonuna (tahminler hariç, mevcut maçların üzerine yazılmadan) aktarılacaktır. Emin misiniz?`)) {
       return;
     }
 
     bulkMigrateBtn.disabled = true;
     try {
-      const sourceSnapshot = await getDocs(collection(db, 'groups', groupCode, 'matches'));
+      const sourceSnapshot = await getDocs(collection(db, 'groups', sourceLeague, 'matches'));
       let copiedCount = 0;
       let skippedCount = 0;
 
       for (const sourceDoc of sourceSnapshot.docs) {
         const matchId = sourceDoc.id;
-        const targetRef = doc(db, 'groups', targetCode, 'matches', matchId);
+        const targetRef = doc(db, 'groups', targetLeague, 'matches', matchId);
         const targetSnap = await getDoc(targetRef);
 
         if (targetSnap.exists()) {
           skippedCount++;
         } else {
           const data = { ...sourceDoc.data() };
-          delete data.predictions;
+          delete data.predictions; // Tahminler kopyalanmıyor
           await setDoc(targetRef, data);
           copiedCount++;
         }
