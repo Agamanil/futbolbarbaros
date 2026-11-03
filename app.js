@@ -71,41 +71,46 @@ function renderLeagueOptions() {
   ).join('');
   select.value = groupCode;
 }
+
 function showApp() {
   $('entryView').classList.add('hidden');
   $('appView').classList.remove('hidden');
-  $('userBadge').textContent = player.name;
+  $('userBadge').textContent = player?.name || 'Oyuncu';
   $('userBadge').classList.remove('hidden');
-  $('welcomeName').textContent = player.name;
   document.querySelectorAll('.admin-only').forEach(el => el.classList.toggle('hidden', !isAdmin()));
   renderLeagueOptions();
 }
+
 function activateTab(name) {
   document.querySelectorAll('.tab').forEach(tab => tab.classList.toggle('active', tab.dataset.tab === name));
   ['matches', 'table', 'admin'].forEach(tab => $(`${tab}Tab`).classList.toggle('hidden', tab !== name));
 }
 
-// Yeni maç eklendiğinde veya geçişte senkronizasyon
 async function syncLegacyMatches() {
-  if (!isAdmin()) return;
-  const source = await getDocs(collection(db, 'groups', groupCode, 'matches'));
-  for (const targetCode of SHARED_LEAGUES.filter(c => c !== groupCode)) {
-    const targetCol = collection(db, 'groups', targetCode, 'matches');
-    for (const item of source.docs) {
-      const data = { ...item.data() };
-      delete data.predictions;
-      await setDoc(doc(db, 'groups', targetCode, 'matches', item.id), data, { merge: true });
+  if (!isAdmin() || !groupCode) return;
+  try {
+    const source = await getDocs(collection(db, 'groups', groupCode, 'matches'));
+    for (const targetCode of SHARED_LEAGUES.filter(c => c !== groupCode)) {
+      const targetCol = collection(db, 'groups', targetCode, 'matches');
+      for (const item of source.docs) {
+        const data = { ...item.data() };
+        delete data.predictions;
+        await setDoc(doc(db, 'groups', targetCode, 'matches', item.id), data, { merge: true });
+      }
     }
+  } catch (err) {
+    console.error('Senkronizasyon hatası:', err);
   }
 }
 
 async function switchLeague(code) {
-  if (!memberships.includes(code)) throw new Error('Bu lig kayıtlı liglerinin arasında bulunamadı.');
+  if (!code) return;
   const snap = await getDoc(doc(db, 'groups', code, 'players', uid));
   if (!snap.exists()) throw new Error('Bu ligde oyuncu kaydın bulunamadı.');
   if (groupCode && groupCode !== code) await syncLegacyMatches();
   groupCode = code;
   player = { ...snap.data(), uid };
+  if (!memberships.includes(code)) memberships.push(code);
   localStorage.setItem('fb_leagues', JSON.stringify(memberships));
   showApp();
   listen();
@@ -134,12 +139,8 @@ async function restoreSession() {
     if (!Array.isArray(saved)) saved = [];
   } catch { saved = []; }
 
-  if (!saved.length) {
-    try {
-      const old = JSON.parse(localStorage.getItem('fb_player') || 'null');
-      if (old?.groupCode) saved.push(old.groupCode);
-    } catch {}
-  }
+  // Eski ILOVE12C kalıntılarını yeni ILOVE12CBRO ile değiştir
+  saved = saved.map(c => c === 'ILOVE12C' ? 'ILOVE12CBRO' : c);
 
   memberships = [...new Set(saved.filter(x => typeof x === 'string' && x))];
   const valid = [];
@@ -151,7 +152,14 @@ async function restoreSession() {
   }
   memberships = valid;
   localStorage.setItem('fb_leagues', JSON.stringify(memberships));
-  if (memberships.length) await switchLeague(memberships[0]);
+
+  if (memberships.length) {
+    await switchLeague(memberships[0]);
+  } else {
+    // Hiç geçerli oturum yoksa giriş ekranında kal
+    $('entryView').classList.remove('hidden');
+    $('appView').classList.add('hidden');
+  }
 }
 
 /* İlk kez lig koduyla giriş */
@@ -234,6 +242,8 @@ function listen() {
   matches = []; players = [];
   renderMatches(); renderAdminMatches(); renderTable();
 
+  if (!groupCode) return;
+
   unsubMatches = onSnapshot(
     query(collection(db, 'groups', groupCode, 'matches'), orderBy('kickoff', 'asc')),
     snap => {
@@ -250,8 +260,10 @@ function listen() {
 }
 
 function renderMatches() {
-  $('matchCount').textContent = `${matches.length} MAÇ`;
+  const countEl = $('matchCount');
+  if (countEl) countEl.textContent = `${matches.length} MAÇ`;
   const el = $('matchesList');
+  if (!el) return;
   if (!matches.length) { el.innerHTML = '<div class="empty">Henüz maç eklenmedi.</div>'; return; }
   
   el.innerHTML = matches.map(m => {
@@ -374,6 +386,7 @@ $('matchForm').addEventListener('submit', async e => {
 
 function renderAdminMatches() {
   const el = $('adminMatches');
+  if (!el) return;
   if (!matches.length) { el.innerHTML = '<div class="empty">Henüz maç yok.</div>'; return; }
   el.innerHTML = matches.map(m => `<article class="match-card admin-match-card">
     <div><div class="match-meta">${dateText(m.kickoff)}</div>
@@ -426,14 +439,17 @@ function pointsFor(m, p) {
   if (p.home === m.homeScore && p.away === m.awayScore) return 3;
   return Math.sign(m.homeScore - m.awayScore) === Math.sign(p.home - p.away) ? 1 : 0;
 }
+
 function renderTable() {
+  const leaderboardEl = $('leaderboard');
+  if (!leaderboardEl) return;
   const finished = matches.filter(hasResult);
   const totals = players.map(p => ({
     ...p,
     pts: finished.reduce((sum, m) => sum + pointsFor(m, m.predictions?.[p.id]), 0),
     played: finished.length
   })).sort((a, b) => b.pts - a.pts || a.name.localeCompare(b.name, 'tr'));
-  $('leaderboard').innerHTML = totals.length ? totals.map((p, i) =>
+  leaderboardEl.innerHTML = totals.length ? totals.map((p, i) =>
     `<tr><td>${i + 1}</td><td>${safe(p.name)}${p.id === uid ? ' (Sen)' : ''}</td><td>${p.played}</td><td>${p.pts}</td></tr>`
   ).join('') : '<tr><td colspan="4" class="empty">Henüz oyuncu yok.</td></tr>';
 }
@@ -443,7 +459,7 @@ document.querySelectorAll('.tab').forEach(button => button.addEventListener('cli
   activateTab(button.dataset.tab);
 }));
 
-/* Eski maçları diğer lige aktar butonu işlevselliği (BARBAROS26 -> ILOVE12CBRO) */
+/* Eski maçları diğer lige aktar butonu işlevselliği */
 const bulkMigrateBtn = $('bulkMigrateBtn');
 if (bulkMigrateBtn) {
   bulkMigrateBtn.addEventListener('click', async () => {
@@ -471,7 +487,7 @@ if (bulkMigrateBtn) {
           skippedCount++;
         } else {
           const data = { ...sourceDoc.data() };
-          delete data.predictions; // Tahminler kopyalanmıyor
+          delete data.predictions;
           await setDoc(targetRef, data);
           copiedCount++;
         }
@@ -488,6 +504,7 @@ if (bulkMigrateBtn) {
 }
 
 $('editNameButton').addEventListener('click', () => {
+  if (!player) return;
   $('newPlayerName').value = player.name;
   message($('nameMessage'), '');
   $('nameDialog').showModal();
