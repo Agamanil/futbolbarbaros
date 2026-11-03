@@ -1,0 +1,669 @@
+/* =========================================
+   FUTBOLBARBAROS - DARK FOOTBALL THEME
+   ========================================= */
+
+:root {
+  --bg: #07140f;
+  --surface: #10251b;
+  --surface-light: #183528;
+  --green: #21c477;
+  --green-dark: #15965a;
+  --text: #f1f7f3;
+  --muted: #9aafa3;
+  --red: #ff6262;
+  --border: rgba(255,255,255,0.09);
+  --shadow: 0 12px 35px rgba(0,0,0,0.25);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: Inter, Arial, sans-serif;
+  color: var(--text);
+  background:
+    radial-gradient(ellipse at 50% 0%, rgba(33,196,119,0.13), transparent 45%),
+    linear-gradient(145deg, #07140f, #0b1e15 55%, #06110c);
+  background-attachment: fixed;
+}
+
+button, input, select {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+  transition: 0.2s ease;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.hidden {
+  display: none !important;
+}
+
+/* GENEL YAPI */
+
+.container {
+  width: min(1150px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 35px 0;
+}
+
+.card {
+  background: linear-gradient(145deg, #122a1e, #0e2118);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 26px;
+  box-shadow: var(--shadow);
+}
+
+h1, h2, h3, h4, p {
+  margin-top: 0;
+}
+
+h1, h2 {
+  letter-spacing: 1px;
+}
+
+h1 {
+  color: var(--green);
+  font-size: clamp(2rem, 5vw, 3rem);
+  margin-bottom: 8px;
+}
+
+h2 {
+  color: var(--green);
+  font-size: 1.55rem;
+}
+
+h3 {
+  font-size: 1.2rem;
+}
+
+h4 {
+  font-size: 1.05rem;
+  margin-bottom: 16px;
+}
+
+.subtitle {
+  color: var(--muted);
+  margin-bottom: 28px;
+}
+
+/* GİRİŞ EKRANI */
+
+#entryView {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#entryView .card {
+  width: min(440px, 100%);
+  text-align: center;
+  padding: 38px 30px;
+  border-top: 3px solid var(--green);
+}
+
+#joinForm {
+  text-align: left;
+}
+
+/* FORM ELEMANLARI */
+
+label {
+  display: block;
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin-bottom: 9px;
+}
+
+input, select {
+  width: 100%;
+  min-width: 0;
+  color: var(--text);
+  background: #091a11;
+  border: 1px solid rgba(255,255,255,0.13);
+  border-radius: 9px;
+  padding: 12px 13px;
+  outline: none;
+  margin-top: 7px;
+  margin-bottom: 16px;
+  transition: border 0.2s, box-shadow 0.2s;
+}
+
+input:focus, select:focus {
+  border-color: var(--green);
+  box-shadow: 0 0 0 3px rgba(33,196,119,0.12);
+}
+
+input::placeholder {
+  color: #6f8779;
+}
+
+select option {
+  background: #10251b;
+  color: white;
+}
+
+/* BUTONLAR */
+
+.primary-btn, .small-btn, .secondary-btn, .danger-btn {
+  border: none;
+  border-radius: 9px;
+  padding: 11px 17px;
+  font-weight: 700;
+  color: white;
+}
+
+.primary-btn {
+  background: linear-gradient(135deg, #21c477, #15965a);
+  box-shadow: 0 5px 15px rgba(33,196,119,0.16);
+}
+
+.primary-btn:hover {
+  transform: translateY(-2px);
+  filter: brightness(1.1);
+}
+
+.secondary-btn {
+  background: #34483c;
+}
+
+.small-btn {
+  background: var(--green-dark);
+  padding: 9px 13px;
+  font-size: 0.85rem;
+}
+
+.small-btn:hover {
+  background: var(--green);
+}
+
+.danger-btn {
+  background: #8f3030;
+}
+
+.danger-btn:hover {
+  background: #bd4141;
+}
+
+#joinForm .primary-btn {
+  width: 100%;
+  margin-top: 5px;
+}
+
+/* MESAJLAR */
+
+.message {
+  min-height: 20px;
+  margin-top: 12px;
+  font-size: 0.88rem;
+  overflow-wrap: anywhere;
+}
+
+/* ÜST MENÜ */
+
+.app-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+  padding: 18px 22px;
+  background: rgba(16,37,27,0.9);
+  border: 1px solid var(--border);
+  border-radius: 15px;
+  margin-bottom: 22px;
+  box-shadow: var(--shadow);
+}
+
+.header-left, .header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.header-left h2 {
+  margin: 0;
+}
+
+.header-right {
+  justify-content: flex-end;
+}
+
+.league-selector-wrapper select {
+  width: auto;
+  margin: 0;
+}
+
+.badge {
+  background: rgba(33,196,119,0.13);
+  border: 1px solid rgba(33,196,119,0.35);
+  color: #75e8ad;
+  padding: 8px 12px;
+  border-radius: 30px;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+/* SEKME MENÜSÜ */
+
+.tabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 7px;
+  background: #0d2017;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  margin-bottom: 24px;
+}
+
+.tab {
+  flex: 1;
+  min-width: 130px;
+  border: none;
+  border-radius: 8px;
+  padding: 13px 16px;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.tab:hover {
+  color: white;
+  background: rgba(255,255,255,0.05);
+}
+
+.tab.active {
+  color: #07140f;
+  background: var(--green);
+}
+
+/* BÖLÜMLER */
+
+.tab-content {
+  animation: fadeIn 0.25s ease;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 25px 0 17px;
+}
+
+.section-header h3 {
+  color: var(--green);
+  margin: 0;
+}
+
+/* MAÇ KARTLARI */
+
+.matches-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+  gap: 16px;
+}
+
+.match-card {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 15px;
+  padding: 20px;
+  background: linear-gradient(145deg, #142d20, #102319);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--green);
+  border-radius: 14px;
+  box-shadow: 0 8px 22px rgba(0,0,0,0.16);
+  transition: transform 0.2s, border-color 0.2s;
+}
+
+.match-card:hover {
+  transform: translateY(-3px);
+  border-color: rgba(33,196,119,0.4);
+}
+
+.match-meta {
+  color: var(--muted);
+  font-size: 0.83rem;
+  line-height: 1.6;
+  margin-bottom: 9px;
+}
+
+.teams {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-weight: 800;
+  font-size: 1.05rem;
+  margin: 14px 0;
+}
+
+.teams span {
+  overflow-wrap: anywhere;
+}
+
+.vs {
+  color: var(--green);
+  font-size: 0.8rem;
+  font-weight: 900;
+  flex-shrink: 0;
+}
+
+.match-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.prediction-label {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.prediction-label b {
+  color: var(--green);
+}
+
+.others-predictions {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+/* PUAN TABLOSU */
+
+.table-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow-x: auto;
+  box-shadow: var(--shadow);
+}
+
+.leaderboard-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  min-width: 380px;
+}
+
+.leaderboard-table th {
+  background: #183528;
+  color: var(--green);
+  padding: 15px;
+  font-size: 0.88rem;
+}
+
+.leaderboard-table td {
+  padding: 14px 15px;
+  border-top: 1px solid var(--border);
+}
+
+.leaderboard-table tr:hover td {
+  background: rgba(33,196,119,0.05);
+}
+
+.leaderboard-table td:last-child {
+  color: var(--green);
+  font-weight: 800;
+}
+
+/* YÖNETİM PANELİ */
+
+.admin-card {
+  margin-bottom: 20px;
+}
+
+.admin-card p {
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.two-col {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 15px;
+}
+
+.admin-match-settings {
+  display: grid;
+  gap: 12px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.admin-match-settings label {
+  margin-bottom: 0;
+}
+
+.admin-match-settings input {
+  margin-bottom: 0;
+}
+
+.admin-match-card {
+  gap: 18px;
+}
+
+/* BAŞKA LİGE KATILMA */
+
+.join-another-card {
+  margin-top: 25px;
+}
+
+.inline-form {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.inline-form input {
+  flex: 1;
+  margin: 0;
+}
+
+.inline-form button {
+  flex-shrink: 0;
+}
+
+/* BOŞ DURUMLAR */
+
+.empty {
+  color: var(--muted);
+  text-align: center;
+  padding: 25px;
+  background: rgba(255,255,255,0.025);
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+}
+
+/* MODAL PENCERELER */
+
+.modal {
+  width: min(460px, calc(100% - 28px));
+  max-width: 460px;
+  padding: 0;
+  border: 1px solid rgba(33,196,119,0.3);
+  border-radius: 17px;
+  background: #10251b;
+  color: var(--text);
+  box-shadow: 0 25px 80px rgba(0,0,0,0.65);
+}
+
+.modal::backdrop {
+  background: rgba(0,0,0,0.75);
+  backdrop-filter: blur(4px);
+}
+
+.modal-card {
+  border: none;
+  box-shadow: none;
+}
+
+.modal-card h3 {
+  color: var(--green);
+}
+
+.prediction-inputs {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 12px;
+}
+
+.prediction-inputs label {
+  min-width: 0;
+}
+
+.prediction-inputs input {
+  text-align: center;
+  font-size: 1.3rem;
+  font-weight: 800;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+/* KAYDIRMA ÇUBUĞU */
+
+::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+
+::-webkit-scrollbar-track {
+  background: #091810;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #28513b;
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--green-dark);
+}
+
+/* ANİMASYON */
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* MOBİL UYUMLULUK */
+
+@media (max-width: 650px) {
+  .container {
+    width: calc(100% - 20px);
+    padding: 18px 0;
+  }
+
+  .card {
+    padding: 19px;
+  }
+
+  #entryView .card {
+    padding: 28px 20px;
+  }
+
+  .app-header {
+    padding: 16px;
+    align-items: flex-start;
+  }
+
+  .header-left, .header-right {
+    width: 100%;
+  }
+
+  .header-right {
+    justify-content: flex-start;
+  }
+
+  .header-left {
+    justify-content: space-between;
+  }
+
+  .header-left h2 {
+    font-size: 1.25rem;
+  }
+
+  .tabs {
+    gap: 5px;
+  }
+
+  .tab {
+    min-width: 0;
+    padding: 11px 7px;
+    font-size: 0.8rem;
+  }
+
+  .two-col {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+
+  .inline-form {
+    flex-direction: column;
+  }
+
+  .inline-form input,
+  .inline-form button {
+    width: 100%;
+  }
+
+  .teams {
+    font-size: 0.95rem;
+  }
+
+  .match-card {
+    padding: 16px;
+  }
+
+  .match-actions {
+    align-items: flex-start;
+  }
+
+  .match-actions button {
+    width: 100%;
+  }
+
+  .prediction-inputs {
+    gap: 7px;
+  }
+
+  .modal-actions button {
+    flex: 1;
+  }
+}
