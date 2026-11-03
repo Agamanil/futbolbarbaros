@@ -1,533 +1,159 @@
-// FUTBOLBARBAROS - COKLU LIG SISTEMI
-
-import { initializeApp } from 'https://www.gstatic.com/firebasejs/13.2.0/firebase-app.js';
-
-import { getAuth, signInAnonymously, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/13.2.0/firebase-auth.js';
-
-import {
-
-  getFirestore, doc, getDoc, setDoc, collection, addDoc, getDocs,
-
-  query, orderBy, onSnapshot, updateDoc, serverTimestamp, Timestamp
-
-} from 'https://www.gstatic.com/firebasejs/13.2.0/firebase-firestore.js';
-
-import { firebaseConfig, ADMIN_UID } from './config.js';
-
-
-
-const $ = id => document.getElementById(id);
-
-const hasConfig = Boolean(firebaseConfig?.apiKey && firebaseConfig?.projectId);
-
-
-
-const SHARED_LEAGUES = ['BARBAROS26', 'ILOVE12C'];
-
-let db, uid = null, player = null, groupCode = '';
-
-let memberships = [], matches = [], players = [], activeMatch = null;
-
-let unsubMatches = null, unsubPlayers = null;
-
-
-
-const isAdmin = () => Boolean(uid) && uid === ADMIN_UID;
-
-
-
-function message(el, text, isError = true) {
-
-  if (!el) return;
-
-  el.textContent = text;
-
-  el.style.color = isError ? 'var(--red)' : 'var(--green)';
-
-}
-
-function toDate(value) { return value?.toDate ? value.toDate() : new Date(value); }
-
-function fromLocalInput(value) { return value ? new Date(`${value}:00+03:00`) : null; }
-
-function toLocalInput(value) {
-
-  if (!value) return '';
-
-  const parts = new Intl.DateTimeFormat('en-CA', {
-
-    timeZone: 'Europe/Istanbul', year: 'numeric', month: '2-digit',
-
-    day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
-
-  }).formatToParts(toDate(value));
-
-  const part = type => parts.find(p => p.type === type)?.value;
-
-  return `${part('year')}-${part('month')}-${part('day')}T${part('hour')}:${part('minute')}`;
-
-}
-
-function dateText(value) {
-
-  if (!value) return 'Belirlenmedi';
-
-  return toDate(value).toLocaleString('tr-TR', {
-
-    dateStyle: 'medium', timeStyle: 'short', timeZone: 'Europe/Istanbul'
-
-  });
-
-}
-
-function safe(s) {
-
-  return String(s ?? '').replace(/[&<>"']/g, c => ({
-
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-
-  }[c]));
-
-}
-
-function validName(name) { return name.length >= 2 && name.length <= 18; }
-
-function hasResult(m) { return m.homeScore !== undefined && m.awayScore !== undefined; }
-
-function predictionFor(m) { return m.predictions?.[uid]; }
-
-
-
-function isLocked(m) {
-
-  if (!m?.predictionOpenAt || !m?.predictionCloseAt) return true;
-
-  const now = Date.now();
-
-  return now < toDate(m.predictionOpenAt).getTime() ||
-
-         now >= toDate(m.predictionCloseAt).getTime();
-
-}
-
-function predictionStatus(m) {
-
-  if (!m.predictionOpenAt || !m.predictionCloseAt) return 'Tahmin saatleri belirlenmemiş';
-
-  const now = Date.now(), open = toDate(m.predictionOpenAt).getTime();
-
-  const close = toDate(m.predictionCloseAt).getTime();
-
-  if (now < open) return `Tahminler ${dateText(m.predictionOpenAt)} tarihinde açılacak`;
-
-  if (now >= close) return `Tahmin süresi ${dateText(m.predictionCloseAt)} tarihinde sona erdi`;
-
-  return `Tahminler açık · Kapanış: ${dateText(m.predictionCloseAt)}`;
-
-}
-
-
-
-function renderLeagueOptions() {
-
-  const select = $('leagueSelect');
-
-  if (!select) return;
-
-  select.innerHTML = memberships.map(code =>
-
-    `<option value="${safe(code)}">${safe(code)}</option>`
-
-  ).join('');
-
-  select.value = groupCode;
-
-}
-
-function showApp() {
-
-  $('entryView').classList.add('hidden');
-
-  $('appView').classList.remove('hidden');
-
-  $('userBadge').textContent = player.name;
-
-  $('userBadge').classList.remove('hidden');
-
-  $('welcomeName').textContent = player.name;
-
-  document.querySelectorAll('.admin-only').forEach(el => el.classList.toggle('hidden', !isAdmin()));
-
-  renderLeagueOptions();
-
-}
-
-function activateTab(name) {
-
-  document.querySelectorAll('.tab').forEach(tab => tab.classList.toggle('active', tab.dataset.tab === name));
-
-  ['matches', 'table', 'admin'].forEach(tab => $(`${tab}Tab`).classList.toggle('hidden', tab !== name));
-
-}
-
-
-
-// İki ligde maç takvimi ortaktır; tahminler ise lig belgelerinde ayrı kalır.
-
-async function syncLegacyMatches() {
-
-  if (!isAdmin()) return;
-
-  const source = await getDocs(collection(db, 'groups', groupCode, 'matches'));
-
-  for (const targetCode of SHARED_LEAGUES.filter(c => c !== groupCode)) {
-
-    const targetCol = collection(db, 'groups', targetCode, 'matches');
-
-    for (const item of source.docs) {
-
-      const data = { ...item.data() };
-
-      delete data.predictions;
-
-      await setDoc(doc(db, 'groups', targetCode, 'matches', item.id), data, { merge: true });
-
-    }
-
-  }
-
-}
-
-
-
-async function switchLeague(code) {
-
-  if (!memberships.includes(code)) throw new Error('Bu lig kayıtlı liglerinin arasında bulunamadı.');
-
-  const snap = await getDoc(doc(db, 'groups', code, 'players', uid));
-
-  if (!snap.exists()) throw new Error('Bu ligde oyuncu kaydın bulunamadı.');
-
-  if (groupCode && groupCode !== code) await syncLegacyMatches();
-
-  groupCode = code;
-
-  player = { ...snap.data(), uid };
-
-  localStorage.setItem('fb_leagues', JSON.stringify(memberships));
-
-  showApp();
-
-  listen();
-
-  activateTab('matches');
-
-}
-
-
-
-async function boot() {
-
-  if (!hasConfig) return message($('entryMessage'), 'Kurulum eksik: config.js Firebase ayarlarını kontrol et.');
-
-  const app = initializeApp(firebaseConfig), auth = getAuth(app);
-
-  db = getFirestore(app);
-
-  const user = await new Promise((resolve, reject) => {
-
-    let unsubscribe = () => {};
-
-    unsubscribe = onAuthStateChanged(auth, u => {
-
-      if (u) { unsubscribe(); resolve(u); }
-
-    }, reject);
-
-    if (!auth.currentUser) signInAnonymously(auth).catch(reject);
-
-  });
-
-  uid = user.uid;
-
-  await restoreSession();
-
-}
-
-
-
-async function restoreSession() {
-
-  let saved = [];
-
-  try {
-
-    saved = JSON.parse(localStorage.getItem('fb_leagues') || '[]');
-
-    if (!Array.isArray(saved)) saved = [];
-
-  } catch { saved = []; }
-
-
-
-  // Onceki surumde kaydedilen tek lig bilgisini yeni listeye aktar.
-
-  if (!saved.length) {
-
-    try {
-
-      const old = JSON.parse(localStorage.getItem('fb_player') || 'null');
-
-      if (old?.groupCode) saved.push(old.groupCode);
-
-    } catch {}
-
-  }
-
-
-
-  memberships = [...new Set(saved.filter(x => typeof x === 'string' && x))];
-
-  const valid = [];
-
-  for (const code of memberships) {
-
-    try {
-
-      const snap = await getDoc(doc(db, 'groups', code, 'players', uid));
-
-      if (snap.exists()) valid.push(code);
-
-    } catch (err) { console.error('Lig oturumu kontrolü:', code, err); }
-
-  }
-
-  memberships = valid;
-
-  localStorage.setItem('fb_leagues', JSON.stringify(memberships));
-
-  if (memberships.length) await switchLeague(memberships[0]);
-
-}
-
-
-
-/* İlk kez lig koduyla giriş */
-
-$('joinForm').addEventListener('submit', async e => {
-
-  e.preventDefault();
-
-  const msg = $('entryMessage');
-
-  if (!db || !uid) return message(msg, 'Bağlantı henüz hazır değil.');
-
-  const code = $('groupCode').value.trim().toUpperCase();
-
-  const name = $('playerName').value.trim();
-
-  if (!code || !name) return;
-
-  if (!validName(name)) return message(msg, 'İsim 2-18 karakter arasında olmalı.');
-
-  try {
-
-    const group = await getDoc(doc(db, 'groups', code));
-
-    if (!group.exists()) throw new Error('Bu grup koduyla bir lig bulunamadı.');
-
-    const ref = doc(db, 'groups', code, 'players', uid);
-
-    const existing = await getDoc(ref);
-
-    if (existing.exists()) {
-
-      if (existing.data().name !== name) throw new Error('Bu cihazdaki oyuncu profili bu ligde farklı bir isimle kayıtlı. Kayıtlı ismini kullan.');
-
-    } else {
-
-      const all = await getDocs(collection(db, 'groups', code, 'players'));
-
-      if (all.docs.some(d => (d.data().name || '').toLowerCase() === name.toLowerCase()))
-
-        throw new Error('Bu oyuncu adı bu ligde zaten kullanılıyor.');
-
-      await setDoc(ref, { name, uid, joinedAt: serverTimestamp() });
-
-    }
-
-    if (!memberships.includes(code)) memberships.push(code);
-
-    memberships = [...new Set(memberships)];
-
-    localStorage.setItem('fb_leagues', JSON.stringify(memberships));
-
-    localStorage.removeItem('fb_player');
-
-    await switchLeague(code);
-
-  } catch (err) {
-
-    console.error(err);
-
-    message(msg, err.message || 'Giriş yapılamadı.');
-
-  }
-
-});
-
-
-
-/* Uygulama içinden başka lige katıl */
-
-$('leagueJoinForm').addEventListener('submit', async e => {
-
-  e.preventDefault();
-
-  const code = $('newLeagueCode').value.trim().toUpperCase();
-
-  if (!code) return;
-
-  try {
-
-    const group = await getDoc(doc(db, 'groups', code));
-
-    if (!group.exists()) throw new Error('Bu kodla bir lig bulunamadı.');
-
-    const ref = doc(db, 'groups', code, 'players', uid);
-
-    const existing = await getDoc(ref);
-
-    if (existing.exists()) {
-
-      if (!memberships.includes(code)) memberships.push(code);
-
-    } else {
-
-      const all = await getDocs(collection(db, 'groups', code, 'players'));
-
-      if (all.docs.some(d => (d.data().name || '').toLowerCase() === player.name.toLowerCase()))
-
-        throw new Error('Bu oyuncu adı bu ligde zaten kullanılıyor.');
-
-      await setDoc(ref, { name: player.name, uid, joinedAt: serverTimestamp() });
-
-      memberships.push(code);
-
-    }
-
-    memberships = [...new Set(memberships)];
-
-    localStorage.setItem('fb_leagues', JSON.stringify(memberships));
-
-    $('newLeagueCode').value = '';
-
-    message($('leagueMessage'), 'Lige katıldın!', false);
-
-    await switchLeague(code);
-
-  } catch (err) {
-
-    console.error(err);
-
-    message($('leagueMessage'), err.message || 'Lige katılınamadı.');
-
-  }
-
-});
-
-
-
-$('leagueSelect').addEventListener('change', async e => {
-
-  try {
-
-    await switchLeague(e.target.value);
-
-    message($('leagueMessage'), '');
-
-  } catch (err) {
-
-    console.error(err);
-
-    message($('leagueMessage'), err.message || 'Lige geçilemedi.');
-
-    renderLeagueOptions();
-
-  }
-
-});
-
-
-
-function listen() {
-
-  if (unsubMatches) unsubMatches();
-
-  if (unsubPlayers) unsubPlayers();
-
-  matches = []; players = [];
-
-  renderMatches(); renderAdminMatches(); renderTable();
-
-
-
-  unsubMatches = onSnapshot(
-
-    query(collection(db, 'groups', groupCode, 'matches'), orderBy('kickoff', 'asc')),
-
-    snap => {
-
-      matches = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-
-      renderMatches(); renderAdminMatches(); renderTable();
-
-    },
-
-    err => console.error('Maç dinleme hatası:', err)
-
-  );
-
-  unsubPlayers = onSnapshot(
-
-    collection(db, 'groups', groupCode, 'players'),
-
-    snap => { players = snap.docs.map(d => ({ id: d.id, ...d.data() })); renderTable(); },
-
-    err => console.error('Oyuncu dinleme hatası:', err)
-
-  );
-
-}
-
-
-
-function renderMatches() {
-
-  $('matchCount').textContent = `${matches.length} MAÇ`;
-
-  const el = $('matchesList');
-
-  if (!matches.length) { el.innerHTML = '<div class="empty">Henüz maç eklenmedi.</div>'; return; }
-
-  el.innerHTML = matches.map(m => {
-
-    const p = predictionFor(m), locked = isLocked(m);
-
-    let buttonText = p ? 'Düzenle' : 'Tahmin et';
-
-    if (!m.predictionOpenAt || !m.predictionCloseAt) buttonText = 'Saatler belirlenmedi';
-
-    else if (Date.now() < toDate(m.predictionOpenAt).getTime()) buttonText = 'Henüz açılmadı';
-
-    else if (Date.now() >= toDate(m.predictionCloseAt).getTime()) buttonText = 'Tahmin kapandı';
-
-    return `<article class="match-card">
-
-      <div><div class="match-meta">${safe(m.competition || 'FUTBOL')} · ${dateText(m.kickoff)}</div>
-
-      <div class="teams"><span>${safe(m.homeTeam)}</span><span class="vs">VS</span><span>${safe(m.awayTeam)}</span></div>
-
-      <div class="match-meta">${safe(predictionStatus(m))}</div></div>
-
-      <div clas 
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FUTBOLBARBAROS - Çoklu Lig Tahmin Sistemi</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Giriş Ekranı -->
+  <div id="entryView" class="container">
+    <div class="card">
+      <h1>FUTBOLBARBAROS</h1>
+      <p class="subtitle">Çoklu Lig Tahmin Sistemi</p>
+      <form id="joinForm">
+        <label for="groupCode">Lig Kodu</label>
+        <input type="text" id="groupCode" placeholder="Size verilen lig kodu" required autocomplete="off">
+        <label for="playerName">Oyuncu Adı</label>
+        <input type="text" id="playerName" placeholder="Adınız (2-18 karakter)" required autocomplete="off" minlength="2" maxlength="18">
+        <button type="submit" class="primary-btn">Lige Giriş Yap</button>
+      </form>
+      <div id="entryMessage" class="message"></div>
+    </div>
+  </div>
+
+  <!-- Ana Uygulama Ekranı -->
+  <div id="appView" class="container hidden">
+    <header class="app-header">
+      <div class="header-left">
+        <h2>FUTBOLBARBAROS</h2>
+        <div class="league-selector-wrapper">
+          <select id="leagueSelect"></select>
+        </div>
+      </div>
+      <div class="header-right">
+        <span id="userBadge" class="badge hidden"></span>
+        <button id="editNameButton" class="small-btn">İsim Değiştir</button>
+        <button id="leaveButton" class="danger-btn">Oturumu Sıfırla</button>
+      </div>
+    </header>
+
+    <nav class="tabs">
+      <button class="tab active" data-tab="matches">Maçlar & Tahminler</button>
+      <button class="tab" data-tab="table">Puan Tablosu</button>
+      <button class="tab admin-only hidden" data-tab="admin">Yönetim Paneli</button>
+    </nav>
+
+    <!-- Maçlar Sekmesi -->
+    <main id="matchesTab" class="tab-content">
+      <div class="section-header">
+        <h3 id="matchCount">0 MAÇ</h3>
+      </div>
+      <div id="matchesList" class="matches-grid"></div>
+    </main>
+
+    <!-- Puan Tablosu Sekmesi -->
+    <main id="tableTab" class="tab-content hidden">
+      <div class="section-header">
+        <h3>Puan Tablosu</h3>
+      </div>
+      <div class="table-card">
+        <table class="leaderboard-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Oyuncu</th>
+              <th>Oynanan</th>
+              <th>Puan</th>
+            </tr>
+          </thead>
+          <tbody id="leaderboard"></tbody>
+        </table>
+      </div>
+
+      <div class="card join-another-card">
+        <h4>Başka Bir Lige Katıl</h4>
+        <form id="leagueJoinForm" class="inline-form">
+          <input type="text" id="newLeagueCode" placeholder="Size verilen lig kodu" required autocomplete="off">
+          <button type="submit" class="primary-btn">Katıl</button>
+        </form>
+        <div id="leagueMessage" class="message"></div>
+      </div>
+    </main>
+
+    <!-- Yönetim Paneli Sekmesi -->
+    <main id="adminTab" class="tab-content admin-only hidden">
+      <div class="section-header">
+        <h3>Yönetici Paneli</h3>
+      </div>
+      
+      <!-- Eski Maçları Diğer Lige Aktar Bölümü -->
+      <div class="card admin-card">
+        <h4>Toplu Maç Aktarımı</h4>
+        <p class="match-meta">BARBAROS26 ligindeki bütün maçları ILOVE12CBRO ligine (tahminler hariç, mevcut maçların üzerine yazılmadan) topluca kopyalayın.</p>
+        <button id="bulkMigrateBtn" class="primary-btn">Eski maçları diğer lige aktar</button>
+      </div>
+
+      <div class="card admin-card">
+        <h4>Yeni Maç Ekle</h4>
+        <form id="matchForm">
+          <div class="two-col">
+            <label>Ev Sahibi<input type="text" id="homeTeam" required></label>
+            <label>Deplasman<input type="text" id="awayTeam" required></label>
+          </div>
+          <div class="two-col">
+            <label>Organizasyon<input type="text" id="competition" placeholder="Örn: Süper Lig"></label>
+            <label>Maç Başlangıcı<input type="datetime-local" id="kickoff" required></label>
+          </div>
+          <div class="two-col">
+            <label>Tahmin Açılış<input type="datetime-local" id="predictionOpenAt" required></label>
+            <label>Tahmin Kapanış<input type="datetime-local" id="predictionCloseAt" required></label>
+          </div>
+          <button type="submit" class="primary-btn">Maçı Oluştur</button>
+        </form>
+        <div id="matchFormMessage" class="message"></div>
+      </div>
+
+      <div class="section-header">
+        <h3>Mevcut Maçlar ve Saat Ayarları</h3>
+      </div>
+      <div id="adminMatches" class="matches-grid"></div>
+    </main>
+  </div>
+
+  <!-- Tahmin Yapma Dialog Penceresi -->
+  <dialog id="predictionDialog" class="modal">
+    <form id="predictionForm" class="card modal-card">
+      <h3 id="predictionTitle">Maç Tahmini</h3>
+      <p id="predictionKickoff" class="match-meta"></p>
+      <div class="prediction-inputs">
+        <label>Ev Sahibi<input type="number" id="homePrediction" min="0" max="30" required></label>
+        <span class="vs">-</span>
+        <label>Deplasman<input type="number" id="awayPrediction" min="0" max="30" required></label>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="secondary-btn" onclick="document.getElementById('predictionDialog').close()">İptal</button>
+        <button type="submit" class="primary-btn">Tahmini Kaydet</button>
+      </div>
+      <div id="predictionMessage" class="message"></div>
+    </form>
+  </dialog>
+
+  <!-- İsim Değiştirme Dialog Penceresi -->
+  <dialog id="nameDialog" class="modal">
+    <form id="nameForm" class="card modal-card">
+      <h3>Oyuncu Adını Değiştir</h3>
+      <label for="newPlayerName">Yeni Ad</label>
+      <input type="text" id="newPlayerName" required minlength="2" maxlength="18">
+      <div class="modal-actions">
+        <button type="button" class="secondary-btn" id="closeNameDialog">İptal</button>
+        <button type="submit" class="primary-btn">Kaydet</button>
+      </div>
+      <div id="nameMessage" class="message"></div>
+    </form>
+  </dialog>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
