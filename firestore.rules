@@ -1,0 +1,49 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function isMember(groupId) {
+      return signedIn() && exists(/databases/$(database)/documents/groups/$(groupId)/players/$(request.auth.uid));
+    }
+    function isAdmin() {
+      return signedIn() && request.auth.uid == 'YONETICI_UID_BURAYA';
+    }
+
+    match /groups/{groupId} {
+      // Grup kodunu bilen oturum açmış kullanıcı, katılabilmek için grup belgesini okuyabilir.
+      allow get: if signedIn();
+      allow list: if isAdmin();
+      allow create, update, delete: if isAdmin();
+
+      match /players/{playerId} {
+        allow read: if isMember(groupId) || isAdmin();
+        allow create: if signedIn() && playerId == request.auth.uid
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.keys().hasOnly(['name', 'uid', 'joinedAt', 'points'])
+          && request.resource.data.name is string
+          && request.resource.data.name.size() >= 2
+          && request.resource.data.name.size() <= 18
+          && exists(/databases/$(database)/documents/groups/$(groupId));
+        allow update, delete: if isAdmin();
+      }
+
+      match /matches/{matchId} {
+        allow read: if isMember(groupId) || isAdmin();
+        allow create, delete: if isAdmin();
+        allow update: if isAdmin() || (
+          isMember(groupId)
+          && request.time < resource.data.kickoff
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['predictions'])
+          && request.resource.data.predictions.diff(resource.data.predictions).affectedKeys().hasOnly([request.auth.uid])
+          && request.resource.data.predictions[request.auth.uid].keys().hasOnly(['home', 'away', 'playerName', 'updatedAt'])
+          && request.resource.data.predictions[request.auth.uid].home is int
+          && request.resource.data.predictions[request.auth.uid].away is int
+          && request.resource.data.predictions[request.auth.uid].home >= 0
+          && request.resource.data.predictions[request.auth.uid].home <= 30
+          && request.resource.data.predictions[request.auth.uid].away >= 0
+          && request.resource.data.predictions[request.auth.uid].away <= 30
+        );
+      }
+    }
+  }
+}
