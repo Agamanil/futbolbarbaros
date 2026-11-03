@@ -1,148 +1,160 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="tr">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#0b2f20">
-  <title>FUTBOLBARBAROS</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FUTBOLBARBAROS - Çoklu Lig Tahmin Sistemi</title>
   <link rel="stylesheet" href="style.css">
-  <style>
-    .league-switcher{margin:18px 0 24px;padding:16px;border:1px solid rgba(255,255,255,.12);border-radius:14px;background:rgba(255,255,255,.04);display:grid;gap:10px}
-    .league-switcher form{display:flex;flex-wrap:wrap;gap:8px}
-    .league-switcher input,.league-switcher select{min-width:0;padding:11px 12px;border-radius:9px;border:1px solid rgba(255,255,255,.2);background:#102f24;color:inherit;font:inherit}
-    .league-switcher form input{flex:1 1 180px}
-    .league-switcher button{padding:10px 14px;border:0;border-radius:9px;cursor:pointer;font:inherit;font-weight:700}
-  </style>
 </head>
 <body>
-  <div class="pitch-lines" aria-hidden="true"></div>
-  <header class="topbar">
-    <a class="brand" href="#"><span class="ball">⚽</span> FUTBOL<span>BARBAROS</span></a>
-    <div id="userBadge" class="user-badge hidden"></div>
-  </header>
-  <main>
-    <section id="entryView" class="panel entry-panel">
-      <div class="eyebrow">ARKADAŞLARINA ÖZEL TAHMİN LİGİ</div>
-      <h1>Maçın heyecanı,<br><em>tahminin rekabeti.</em></h1>
-      <p class="muted">Grup kodunu ve oyuncu adını gir, lige katıl.</p>
-      <form id="joinForm" class="stack">
-        <label>Grup kodu<input id="groupCode" required maxlength="24" placeholder="Örn. BARBAROS26" autocomplete="off"></label>
-        <label>Oyuncu adı<input id="playerName" required maxlength="18" placeholder="Örn. Anıl" autocomplete="nickname"></label>
-        <button class="primary" type="submit">Lige katıl <span>→</span></button>
+  <!-- Giriş Ekranı -->
+  <div id="entryView" class="container">
+    <div class="card">
+      <h1>FUTBOLBARBAROS</h1>
+      <p class="subtitle">Çoklu Lig Tahmin Sistemi</p>
+      <form id="joinForm">
+        <label for="groupCode">Lig Kodu</label>
+        <input type="text" id="groupCode" placeholder="Size verilen lig kodu" required autocomplete="off">
+        <label for="playerName">Oyuncu Adı</label>
+        <input type="text" id="playerName" placeholder="Adınız (2-18 karakter)" required autocomplete="off" minlength="2" maxlength="18">
+        <button type="submit" class="primary-btn">Lige Giriş Yap</button>
       </form>
-      <p id="entryMessage" class="message" role="status"></p>
-      <div class="fineprint">Bir cihazda tek oyuncu profili · Tahminler belirlenen kapanış saatinde kilitlenir</div>
-    </section>
+      <div id="entryMessage" class="message"></div>
+    </div>
+  </div>
 
-    <section id="appView" class="hidden">
-      <div class="welcome-row">
-        <div>
-          <div class="eyebrow">FUTBOLBARBAROS LİGİ</div>
-          <h1>Hoş geldin, <em id="welcomeName">Oyuncu</em></h1>
+  <!-- Ana Uygulama Ekranı -->
+  <div id="appView" class="container hidden">
+    <header class="app-header">
+      <div class="header-left">
+        <h2>FUTBOLBARBAROS</h2>
+        <div class="league-selector-wrapper">
+          <select id="leagueSelect"></select>
         </div>
-        <div class="round-chip">SEZON 01</div>
+      </div>
+      <div class="header-right">
+        <span id="userBadge" class="badge hidden"></span>
+        <button id="editNameButton" class="small-btn">İsim Değiştir</button>
+        <button id="leaveButton" class="danger-btn">Oturumu Sıfırla</button>
+      </div>
+    </header>
+
+    <nav class="tabs">
+      <button class="tab active" data-tab="matches">Maçlar & Tahminler</button>
+      <button class="tab" data-tab="table">Puan Tablosu</button>
+      <button class="tab admin-only hidden" data-tab="admin">Yönetim Paneli</button>
+    </nav>
+
+    <!-- Maçlar Sekmesi -->
+    <main id="matchesTab" class="tab-content">
+      <div class="section-header">
+        <h3 id="matchCount">0 MAÇ</h3>
+      </div>
+      <div id="matchesList" class="matches-grid"></div>
+    </main>
+
+    <!-- Puan Tablosu Sekmesi -->
+    <main id="tableTab" class="tab-content hidden">
+      <div class="section-header">
+        <h3>Puan Tablosu</h3>
+      </div>
+      <div class="table-card">
+        <table class="leaderboard-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Oyuncu</th>
+              <th>Oynanan</th>
+              <th>Puan</th>
+            </tr>
+          </thead>
+          <tbody id="leaderboard"></tbody>
+        </table>
       </div>
 
-      <div class="league-switcher">
-        <label for="leagueSelect">Aktif lig</label>
-        <select id="leagueSelect" aria-label="Aktif lig"></select>
-        <form id="leagueJoinForm">
-          <input id="newLeagueCode" maxlength="24" placeholder="Yeni lig kodu (ILOVE12C)" required autocomplete="off">
-          <button type="submit">Lige katıl</button>
+      <div class="card join-another-card">
+        <h4>Başka Bir Lige Katıl</h4>
+        <form id="leagueJoinForm" class="inline-form">
+          <input type="text" id="newLeagueCode" placeholder="Size verilen lig kodu" required autocomplete="off">
+          <button type="submit" class="primary-btn">Katıl</button>
         </form>
-        <p id="leagueMessage" class="message" role="status"></p>
+        <div id="leagueMessage" class="message"></div>
+      </div>
+    </main>
+
+    <!-- Yönetim Paneli Sekmesi -->
+    <main id="adminTab" class="tab-content admin-only hidden">
+      <div class="section-header">
+        <h3>Yönetici Paneli</h3>
+      </div>
+      
+      <!-- Eski Maçları Diğer Lige Aktar Bölümü -->
+      <div class="card admin-card">
+        <h4>Toplu Maç Aktarımı</h4>
+        <p class="match-meta">Aktif ligdeki tüm maçları diğer lige (tahminler hariç, mevcut maçların üzerine yazılmadan) topluca kopyalayın.</p>
+        <button id="bulkMigrateBtn" class="primary-btn">Eski maçları diğer lige aktar</button>
       </div>
 
-      <nav class="tabs">
-        <button class="tab active" data-tab="matches">Maçlar</button>
-        <button class="tab" data-tab="table">Puan durumu</button>
-        <button class="tab admin-only hidden" data-tab="admin">Yönetici</button>
-      </nav>
-
-      <section id="matchesTab" class="tab-content">
-        <div class="section-heading">
-          <div><div class="eyebrow">TAKVİM & TAHMİNLER</div><h2>Yaklaşan maçlar</h2></div>
-          <span id="matchCount" class="count">0 MAÇ</span>
-        </div>
-        <div id="predictionStatus" class="admin-warning">Tahmin takvimi maç bazında gösterilir.</div>
-        <div id="matchesList" class="matches-list"><div class="empty">Henüz maç eklenmedi. Yönetici fikstürü hazırlıyor.</div></div>
-      </section>
-
-      <section id="tableTab" class="tab-content hidden">
-        <div class="section-heading">
-          <div><div class="eyebrow">REKABET KIZIŞIYOR</div><h2>Lig tablosu</h2></div>
-          <span class="count">GENEL SIRALAMA</span>
-        </div>
-        <div class="table-wrap">
-          <table>
-            <thead><tr><th>#</th><th>Oyuncu</th><th>O</th><th>PUAN</th></tr></thead>
-            <tbody id="leaderboard"><tr><td colspan="4" class="empty">Henüz puan yok.</td></tr></tbody>
-          </table>
-        </div>
-        <p class="scoring-note">Tam skor: <b>3 puan</b> · Doğru maç sonucu: <b>1 puan</b></p>
-      </section>
-
-      <section id="adminTab" class="tab-content hidden">
-        <div class="section-heading">
-          <div><div class="eyebrow">KONTROL MERKEZİ</div><h2>Yönetici paneli</h2></div>
-          <span class="admin-tag">YÖNETİCİ</span>
-        </div>
-        <form id="matchForm" class="admin-form">
-          <h3>Yeni maç ekle</h3>
+      <div class="card admin-card">
+        <h4>Yeni Maç Ekle</h4>
+        <form id="matchForm">
           <div class="two-col">
-            <label>Ev sahibi<input id="homeTeam" required placeholder="Beşiktaş"></label>
-            <label>Deplasman<input id="awayTeam" required placeholder="Galatasaray"></label>
+            <label>Ev Sahibi<input type="text" id="homeTeam" required></label>
+            <label>Deplasman<input type="text" id="awayTeam" required></label>
           </div>
           <div class="two-col">
-            <label>Maç tarihi ve saati<input id="kickoff" type="datetime-local" required></label>
-            <label>Organizasyon<input id="competition" placeholder="Süper Lig"></label>
+            <label>Organizasyon<input type="text" id="competition" placeholder="Örn: Süper Lig"></label>
+            <label>Maç Başlangıcı<input type="datetime-local" id="kickoff" required></label>
           </div>
-          <label>Tahminlerin açılacağı tarih ve saat<input id="predictionOpenAt" type="datetime-local" required></label>
-          <label>Tahminlerin kapanacağı tarih ve saat<input id="predictionCloseAt" type="datetime-local" required></label>
-          <button class="primary" type="submit">Maçı fikstüre ekle +</button>
-          <p id="matchFormMessage" class="message" role="status"></p>
+          <div class="two-col">
+            <label>Tahmin Açılış<input type="datetime-local" id="predictionOpenAt" required></label>
+            <label>Tahmin Kapanış<input type="datetime-local" id="predictionCloseAt" required></label>
+          </div>
+          <button type="submit" class="primary-btn">Maçı Oluştur</button>
         </form>
-        <div class="admin-list">
-          <h3>Maç sonuçlarını ve tahmin saatlerini yönet</h3>
-          <div id="adminMatches" class="matches-list"><div class="empty">Henüz maç yok.</div></div>
-        </div>
-        <div class="admin-warning">Yönetici yetkisi Firebase UID ve Firestore güvenlik kurallarıyla korunur.</div>
-      </section>
-
-      <button id="editNameButton" class="text-button">Oyuncu adımı değiştir</button>
-      <button id="leaveButton" class="text-button">Bu cihazdaki lig oturumlarını sıfırla</button>
-    </section>
-  </main>
-  <footer>FUTBOLBARBAROS <span>·</span> SADECE ARKADAŞLAR ARASINDA</footer>
-
-  <dialog id="predictionDialog">
-    <form method="dialog" id="predictionForm">
-      <button class="close" aria-label="Kapat">×</button>
-      <div class="eyebrow">SKOR TAHMİNİN</div>
-      <h2 id="predictionTitle">Maç</h2>
-      <p class="muted" id="predictionKickoff"></p>
-      <div class="score-inputs">
-        <label>Ev sahibi<input id="homePrediction" type="number" min="0" max="30" required></label>
-        <span>:</span>
-        <label>Deplasman<input id="awayPrediction" type="number" min="0" max="30" required></label>
+        <div id="matchFormMessage" class="message"></div>
       </div>
-      <p class="fineprint">Tam skor 3, doğru sonuç 1 puan.</p>
-      <button class="primary" type="submit">Tahmini kaydet</button>
-      <p id="predictionMessage" class="message"></p>
+
+      <div class="section-header">
+        <h3>Mevcut Maçlar ve Saat Ayarları</h3>
+      </div>
+      <div id="adminMatches" class="matches-grid"></div>
+    </main>
+  </div>
+
+  <!-- Tahmin Yapma Dialog Penceresi -->
+  <dialog id="predictionDialog" class="modal">
+    <form id="predictionForm" class="card modal-card">
+      <h3 id="predictionTitle">Maç Tahmini</h3>
+      <p id="predictionKickoff" class="match-meta"></p>
+      <div id="modalPredictionWarning" style="font-size: 0.85rem; color: #f59e0b; background: rgba(245, 158, 11, 0.1); padding: 8px; border-radius: 4px; margin-bottom: 10px; display: none;"></div>
+      <div class="prediction-inputs">
+        <label>Ev Sahibi<input type="number" id="homePrediction" min="0" max="30" required></label>
+        <span class="vs">-</span>
+        <label>Deplasman<input type="number" id="awayPrediction" min="0" max="30" required></label>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="secondary-btn" onclick="document.getElementById('predictionDialog').close()">İptal</button>
+        <button type="submit" class="primary-btn">Tahmini Kaydet</button>
+      </div>
+      <div id="predictionMessage" class="message"></div>
     </form>
   </dialog>
 
-  <dialog id="nameDialog">
-    <form id="nameForm">
-      <button type="button" class="close" id="closeNameDialog">×</button>
-      <div class="eyebrow">OYUNCU PROFİLİ</div>
-      <h2>İsmini değiştir</h2>
-      <p class="muted">Yeni oyuncu adını belirle. Değişiklik katıldığın bütün liglere uygulanır.</p>
-      <label>Yeni oyuncu adı<input id="newPlayerName" maxlength="18" minlength="2" required></label>
-      <button class="primary" type="submit">İsmi kaydet</button>
-      <p id="nameMessage" class="message"></p>
+  <!-- İsim Değiştirme Dialog Penceresi -->
+  <dialog id="nameDialog" class="modal">
+    <form id="nameForm" class="card modal-card">
+      <h3>Oyuncu Adını Değiştir</h3>
+      <label for="newPlayerName">Yeni Ad</label>
+      <input type="text" id="newPlayerName" required minlength="2" maxlength="18">
+      <div class="modal-actions">
+        <button type="button" class="secondary-btn" id="closeNameDialog">İptal</button>
+        <button type="submit" class="primary-btn">Kaydet</button>
+      </div>
+      <div id="nameMessage" class="message"></div>
     </form>
   </dialog>
+
   <script type="module" src="app.js"></script>
 </body>
 </html>
