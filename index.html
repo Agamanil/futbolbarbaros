@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="tr">
 <head>
@@ -43,6 +42,18 @@
     .honor-name { min-height: 20px; color: #fff; font-size: 14px; font-weight: 900; overflow-wrap: anywhere; }
     .honor-subtitle { margin-top: 4px; color: var(--muted, #a6b9aa); font-size: 10px; }
     .season-divider { border: 0; border-top: 1px solid #ffffff16; margin: 17px 0; }
+
+    /* Lig yönetim paneli */
+    .league-manage-row { display: grid; grid-template-columns: minmax(130px, .8fr) minmax(180px, 1.4fr) auto; gap: 10px; align-items: end; padding: 12px 0; border-bottom: 1px solid #ffffff18; }
+    .league-manage-code strong, .league-manage-code small { display: block; overflow-wrap: anywhere; }
+    .league-manage-code small { color: var(--muted, #a6b9aa); font-size: 10px; margin-top: 4px; }
+    .league-manage-input input { width: 100%; min-width: 0; }
+    .league-create-grid { display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; align-items: end; }
+    #leagueManagerMessage, #leagueCreateMessage { margin-top: 9px; }
+    @media (max-width: 620px) {
+      .league-manage-row { grid-template-columns: 1fr; }
+      .league-create-grid { grid-template-columns: 1fr; }
+    }
 
     /* Yönetici maç kopyalama menüsü */
     .copy-match-check { display: flex; align-items: center; gap: 7px; font-size: 11px; color: var(--green, #b7f36b); margin-bottom: 8px; }
@@ -205,8 +216,7 @@
             <div class="honor-subtitle">Kral tahtının sahibi</div>
           </article>
 
-          <article class="honor-card last">
-            <svg class="honor-figure" viewBox="0 0 220 220" role="img" aria-label="Yerde üzgün oturan stickman">
+          <article class="honor-card last">            <svg class="honor-figure" viewBox="0 0 220 220" role="img" aria-label="Yerde üzgün oturan stickman">
               <!-- Zemin -->
               <path d="M26 190 H194" stroke="#829188" stroke-width="4" stroke-linecap="round"/>
 
@@ -267,6 +277,28 @@
     <main id="adminTab" class="tab-content admin-only hidden">
       <div class="section-header">
         <h3>Yönetici Paneli</h3>
+      </div>
+
+      <div class="card admin-card">
+        <h4>Ligleri Yönet</h4>
+        <p class="match-meta">
+          Lig adını değiştirmek mevcut oyuncuları, maçları ve tahminleri etkilemez. Lig kodu sabit kalır.
+          Yeni lig oluşturduğunda oyuncular bu kodla katılabilir.
+        </p>
+
+        <form id="leagueCreateForm">
+          <div class="league-create-grid">
+            <label>Yeni lig kodu<input type="text" id="newLeagueCodeAdmin" maxlength="24" placeholder="ÖRN: YENILIG27" required autocomplete="off"></label>
+            <label>Görünen lig adı<input type="text" id="newLeagueNameAdmin" maxlength="32" placeholder="Örn: Yeni Lig 2027" required></label>
+            <button type="submit" class="primary-btn">Lig oluştur</button>
+          </div>
+        </form>
+        <div id="leagueCreateMessage" class="message" aria-live="polite"></div>
+
+        <hr class="season-divider">
+        <h4>Mevcut ligler</h4>
+        <div id="leagueManagerList"></div>
+        <div id="leagueManagerMessage" class="message" aria-live="polite"></div>
       </div>
 
       <div class="card admin-card">
