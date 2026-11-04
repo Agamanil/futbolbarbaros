@@ -1,4 +1,3 @@
-
 // FUTBOLBARBAROS - COKLU LIG + GUNLUK BONUS MAC SISTEMI
 // Firebase Spark (ucretsiz plan) ile calisir. Cloud Functions gerektirmez.
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/13.2.0/firebase-app.js';
@@ -23,6 +22,8 @@ const KNOWN_LEAGUE_CODES = KNOWN_LEAGUES.map(item => item.code);
 
 let db, uid = null, player = null, groupCode = '';
 let memberships = [], matches = [], players = [], bonusSelections = [], activeMatch = null;
+let leagueCatalog = [];
+let leagueNames = {};
 let unsubMatches = null, unsubPlayers = null, unsubBonusSelections = null;
 
 const isAdmin = () => Boolean(uid) && uid === ADMIN_UID;
@@ -142,10 +143,40 @@ function renderLeagueOptions() {
   if (!select) return;
 
   select.innerHTML = memberships
-    .map(code => `<option value="${safe(code)}">${safe(code)}</option>`)
+    .map(code => `<option value="${safe(code)}">${safe(leagueNames[code] || code)}</option>`)
     .join('');
 
   select.value = groupCode;
+}
+
+/* Yönetici için Firestore'daki bütün ligleri getirir. */
+async function loadLeagueCatalog() {
+  if (!isAdmin()) return;
+
+  const snap = await getDocs(collection(db, 'groups'));
+  leagueCatalog = snap.docs.map(item => ({
+    code: item.id,
+    name: item.data().name || item.id
+  })).sort((a, b) => a.name.localeCompare(b.name, 'tr'));
+
+  leagueNames = Object.fromEntries(leagueCatalog.map(item => [item.code, item.name]));
+  renderLeagueOptions();
+  refreshCopyTargetOptions();
+  renderLeagueManager();
+}
+
+/* Üyenin kayıtlı olduğu liglerin görünen adlarını getirir. */
+async function loadMembershipLeagueNames() {
+  for (const code of memberships) {
+    try {
+      const snap = await getDoc(doc(db, 'groups', code));
+      leagueNames[code] = snap.exists() ? (snap.data().name || code) : code;
+    } catch (err) {
+      console.warn('Lig adı okunamadı:', code, err);
+      leagueNames[code] = leagueNames[code] || code;
+    }
+  }
+  renderLeagueOptions();
 }
 
 /* Yönetici panelindeki hedef ligleri doldurur. */
@@ -154,15 +185,48 @@ function refreshCopyTargetOptions() {
   if (!select) return;
 
   const previous = select.value;
+  const catalog = leagueCatalog.length
+    ? leagueCatalog
+    : KNOWN_LEAGUES.map(item => ({ code: item.code, name: leagueNames[item.code] || item.label }));
 
-  select.innerHTML = KNOWN_LEAGUES
+  select.innerHTML = catalog
     .filter(item => item.code !== groupCode)
-    .map(item => `<option value="${safe(item.code)}">${safe(item.label)}</option>`)
+    .map(item => `<option value="${safe(item.code)}">${safe(item.name)} · ${safe(item.code)}</option>`)
     .join('');
 
   if ([...select.options].some(option => option.value === previous)) {
     select.value = previous;
   }
+}
+
+/* Yönetici panelindeki lig düzenleme listesini oluşturur. */
+function renderLeagueManager() {
+  const el = $('leagueManagerList');
+  if (!el) return;
+
+  if (!isAdmin()) {
+    el.innerHTML = '';
+    return;
+  }
+
+  if (!leagueCatalog.length) {
+    el.innerHTML = '<div class="empty">Henüz lig bulunamadı.</div>';
+    return;
+  }
+
+  el.innerHTML = leagueCatalog.map(league => `
+    <div class="league-manage-row">
+      <div class="league-manage-code">
+        <strong>${safe(league.name)}</strong>
+        <small>Kod: ${safe(league.code)}</small>
+      </div>
+      <label class="league-manage-input">
+        Görünen lig adı
+        <input type="text" maxlength="32" value="${safe(league.name)}" data-league-name="${safe(league.code)}">
+      </label>
+      <button type="button" class="small-btn" data-save-league="${safe(league.code)}">Adı kaydet</button>
+    </div>
+  `).join('');
 }
 
 /* Yönetici giriş yaptığında eksik bilinen ligleri oluşturur. */
@@ -197,9 +261,7 @@ function showApp() {
 
   renderLeagueOptions();
   refreshCopyTargetOptions();
-}
-
-function activateTab(name) {
+}function activateTab(name) {
   document.querySelectorAll('.tab').forEach(tab => {
     tab.classList.toggle('active', tab.dataset.tab === name);
   });
@@ -212,12 +274,16 @@ function activateTab(name) {
 async function switchLeague(code) {
   if (!code) return;
 
-  const snap = await getDoc(doc(db, 'groups', code, 'players', uid));
+  const [snap, groupSnap] = await Promise.all([
+    getDoc(doc(db, 'groups', code, 'players', uid)),
+    getDoc(doc(db, 'groups', code))
+  ]);
 
   if (!snap.exists()) {
     throw new Error('Bu ligde oyuncu kaydın bulunamadı.');
   }
 
+  leagueNames[code] = groupSnap.exists() ? (groupSnap.data().name || code) : code;
   groupCode = code;
   player = { ...snap.data(), uid };
 
@@ -265,6 +331,7 @@ async function boot() {
   if (isAdmin()) {
     try {
       await ensureKnownLeagueDocs();
+      await loadLeagueCatalog();
     } catch (err) {
       console.error('Ligler hazırlanamadı:', err);
     }
@@ -306,6 +373,7 @@ async function restoreSession() {
 
   memberships = valid;
   localStorage.setItem('fb_leagues', JSON.stringify(memberships));
+  await loadMembershipLeagueNames();
 
   if (memberships.length) {
     await switchLeague(memberships[0]);
@@ -517,9 +585,7 @@ function listen() {
       }
     }
   );
-}
-
-function bonusMatchIds() {
+}function bonusMatchIds() {
   return new Set(
     bonusSelections
       .map(selection => selection.matchId)
@@ -735,9 +801,7 @@ $('matchForm').addEventListener('submit', async e => {
     console.error(err);
     message($('matchFormMessage'), 'Maç eklenemedi: ' + err.message);
   }
-});
-
-function renderAdminMatches() {
+});function renderAdminMatches() {
   const el = $('adminMatches');
   if (!el) return;
 
@@ -995,9 +1059,7 @@ function getBonusContext() {
     myYesterdaySelection,
     isLastPlace
   };
-}
-
-function renderBonusPanel() {
+}function renderBonusPanel() {
   const todayList = $('todayBonusList');
   const tomorrowList = $('tomorrowBonusList');
   const status = $('bonusStatus');
@@ -1170,6 +1232,96 @@ async function selectBonusMatch(matchId) {
   }
 }
 
+/* Lig yönetimi: görünen adı güncelleme. Lig kodu ve altındaki veriler değişmez. */
+const leagueManagerList = $('leagueManagerList');
+if (leagueManagerList) {
+  leagueManagerList.addEventListener('click', async event => {
+    const button = event.target.closest('[data-save-league]');
+    if (!button) return;
+
+    if (!isAdmin()) return alert('Yönetici yetkisi yok.');
+
+    const code = button.dataset.saveLeague;
+    const input = leagueManagerList.querySelector(`[data-league-name="${CSS.escape(code)}"]`);
+    const newName = input?.value.trim() || '';
+
+    if (newName.length < 2 || newName.length > 32) {
+      return alert('Lig adı 2-32 karakter arasında olmalı.');
+    }
+
+    button.disabled = true;
+    try {
+      await updateDoc(doc(db, 'groups', code), {
+        name: newName,
+        updatedAt: serverTimestamp(),
+        updatedBy: uid
+      });
+
+      leagueNames[code] = newName;
+      const item = leagueCatalog.find(league => league.code === code);
+      if (item) item.name = newName;
+      leagueCatalog.sort((a, b) => a.name.localeCompare(b.name, 'tr'));
+
+      renderLeagueManager();
+      renderLeagueOptions();
+      refreshCopyTargetOptions();
+      message($('leagueManagerMessage'), `${code} lig adı güncellendi.`, false);
+    } catch (err) {
+      console.error('Lig adı güncellenemedi:', err);
+      message($('leagueManagerMessage'), 'Lig adı güncellenemedi: ' + (err.message || err));
+    } finally {
+      button.disabled = false;
+    }
+  });
+}
+
+const leagueCreateForm = $('leagueCreateForm');
+if (leagueCreateForm) {
+  leagueCreateForm.addEventListener('submit', async event => {
+    event.preventDefault();
+
+    if (!isAdmin()) return message($('leagueCreateMessage'), 'Yönetici yetkisi yok.');
+
+    const code = $('newLeagueCodeAdmin').value.trim().toUpperCase();
+    const name = $('newLeagueNameAdmin').value.trim();
+
+    if (!/^[A-Z0-9_-]{3,24}$/.test(code)) {
+      return message($('leagueCreateMessage'), 'Lig kodu 3-24 karakter olmalı; yalnızca harf, rakam, tire ve alt çizgi kullan.');
+    }
+    if (name.length < 2 || name.length > 32) {
+      return message($('leagueCreateMessage'), 'Lig adı 2-32 karakter arasında olmalı.');
+    }
+
+    const submit = leagueCreateForm.querySelector('button[type="submit"]');
+    submit.disabled = true;
+
+    try {
+      const ref = doc(db, 'groups', code);
+      const existing = await getDoc(ref);
+      if (existing.exists()) {
+        throw new Error('Bu lig kodu zaten kullanılıyor.');
+      }
+
+      await setDoc(ref, {
+        code,
+        name,
+        createdAt: serverTimestamp(),
+        createdBy: uid
+      });
+
+      $('newLeagueCodeAdmin').value = '';
+      $('newLeagueNameAdmin').value = '';
+      await loadLeagueCatalog();
+      message($('leagueCreateMessage'), `${name} ligi oluşturuldu. Oyuncular ${code} koduyla katılabilir.`, false);
+    } catch (err) {
+      console.error('Lig oluşturulamadı:', err);
+      message($('leagueCreateMessage'), 'Lig oluşturulamadı: ' + (err.message || err));
+    } finally {
+      submit.disabled = false;
+    }
+  });
+}
+
 /* Sekme geçişleri */
 document.querySelectorAll('.tab').forEach(button => {
   button.addEventListener('click', () => {
@@ -1204,7 +1356,7 @@ if (copySelectedMatchesBtn) {
 
     const status = $('copyMatchesMessage');
 
-    if (!targetLeague || !KNOWN_LEAGUE_CODES.includes(targetLeague)) {
+    if (!targetLeague || !leagueCatalog.some(item => item.code === targetLeague)) {
       return message(status, 'Geçerli bir hedef lig seç.');
     }
 
