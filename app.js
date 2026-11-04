@@ -1,19 +1,22 @@
-// FUTBOLBARBAROS - COKLU LIG SISTEMI
+
+// FUTBOLBARBAROS - COKLU LIG + GUNLUK BONUS MAC SISTEMI
+// Firebase Spark (ucretsiz plan) ile calisir. Cloud Functions gerektirmez.
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/13.2.0/firebase-app.js';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/13.2.0/firebase-auth.js';
 import {
-  getFirestore, doc, getDoc, setDoc, collection, addDoc, getDocs,
+  getFirestore, doc, getDoc, setDoc, collection, getDocs,
   query, orderBy, onSnapshot, updateDoc, serverTimestamp, Timestamp
 } from 'https://www.gstatic.com/firebasejs/13.2.0/firebase-firestore.js';
 import { firebaseConfig, ADMIN_UID } from './config.js';
 
 const $ = id => document.getElementById(id);
 const hasConfig = Boolean(firebaseConfig?.apiKey && firebaseConfig?.projectId);
-
+const TIME_ZONE = 'Europe/Istanbul';
 const SHARED_LEAGUES = ['BARBAROS26', 'ILOVE12CBRO'];
+
 let db, uid = null, player = null, groupCode = '';
-let memberships = [], matches = [], players = [], activeMatch = null;
-let unsubMatches = null, unsubPlayers = null;
+let memberships = [], matches = [], players = [], bonusSelections = [], activeMatch = null;
+let unsubMatches = null, unsubPlayers = null, unsubBonusSelections = null;
 
 const isAdmin = () => Boolean(uid) && uid === ADMIN_UID;
 
@@ -22,28 +25,51 @@ function message(el, text, isError = true) {
   el.textContent = text;
   el.style.color = isError ? 'var(--red)' : 'var(--green)';
 }
-function toDate(value) { return value?.toDate ? value.toDate() : new Date(value); }
+
+function toDate(value) {
+  if (!value) return null;
+  return value?.toDate ? value.toDate() : new Date(value);
+}
+
 function fromLocalInput(value) { return value ? new Date(`${value}:00+03:00`) : null; }
+
 function toLocalInput(value) {
   if (!value) return '';
   const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Europe/Istanbul', year: 'numeric', month: '2-digit',
-    day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
+    timeZone: TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
   }).formatToParts(toDate(value));
   const part = type => parts.find(p => p.type === type)?.value;
   return `${part('year')}-${part('month')}-${part('day')}T${part('hour')}:${part('minute')}`;
 }
+
 function dateText(value) {
   if (!value) return 'Belirlenmedi';
   return toDate(value).toLocaleString('tr-TR', {
-    dateStyle: 'medium', timeStyle: 'short', timeZone: 'Europe/Istanbul'
+    dateStyle: 'medium', timeStyle: 'short', timeZone: TIME_ZONE
   });
 }
+
+function dayKey(value = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit'
+  }).formatToParts(toDate(value));
+  const part = type => parts.find(p => p.type === type)?.value;
+  return `${part('year')}-${part('month')}-${part('day')}`;
+}
+
+function shiftDayKey(key, amount) {
+  const [year, month, day] = key.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day + amount));
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`;
+}
+
 function safe(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
   }[c]));
 }
+
 function validName(name) { return name.length >= 2 && name.length <= 18; }
 function hasResult(m) { return m.homeScore !== undefined && m.awayScore !== undefined; }
 function predictionFor(m) { return m.predictions?.[uid]; }
@@ -51,9 +77,9 @@ function predictionFor(m) { return m.predictions?.[uid]; }
 function isLocked(m) {
   if (!m?.predictionOpenAt || !m?.predictionCloseAt) return true;
   const now = Date.now();
-  return now < toDate(m.predictionOpenAt).getTime() ||
-         now >= toDate(m.predictionCloseAt).getTime();
+  return now < toDate(m.predictionOpenAt).getTime() || now >= toDate(m.predictionCloseAt).getTime();
 }
+
 function predictionStatus(m) {
   if (!m.predictionOpenAt || !m.predictionCloseAt) return 'Tahmin saatleri belirlenmemiş';
   const now = Date.now(), open = toDate(m.predictionOpenAt).getTime();
@@ -66,9 +92,7 @@ function predictionStatus(m) {
 function renderLeagueOptions() {
   const select = $('leagueSelect');
   if (!select) return;
-  select.innerHTML = memberships.map(code =>
-    `<option value="${safe(code)}">${safe(code)}</option>`
-  ).join('');
+  select.innerHTML = memberships.map(code => `<option value="${safe(code)}">${safe(code)}</option>`).join('');
   select.value = groupCode;
 }
 
@@ -86,28 +110,10 @@ function activateTab(name) {
   ['matches', 'table', 'admin'].forEach(tab => $(`${tab}Tab`).classList.toggle('hidden', tab !== name));
 }
 
-async function syncLegacyMatches() {
-  if (!isAdmin() || !groupCode) return;
-  try {
-    const source = await getDocs(collection(db, 'groups', groupCode, 'matches'));
-    for (const targetCode of SHARED_LEAGUES.filter(c => c !== groupCode)) {
-      const targetCol = collection(db, 'groups', targetCode, 'matches');
-      for (const item of source.docs) {
-        const data = { ...item.data() };
-        delete data.predictions;
-        await setDoc(doc(db, 'groups', targetCode, 'matches', item.id), data, { merge: true });
-      }
-    }
-  } catch (err) {
-    console.error('Senkronizasyon hatası:', err);
-  }
-}
-
 async function switchLeague(code) {
   if (!code) return;
   const snap = await getDoc(doc(db, 'groups', code, 'players', uid));
   if (!snap.exists()) throw new Error('Bu ligde oyuncu kaydın bulunamadı.');
-  if (groupCode && groupCode !== code) await syncLegacyMatches();
   groupCode = code;
   player = { ...snap.data(), uid };
   if (!memberships.includes(code)) memberships.push(code);
@@ -139,10 +145,10 @@ async function restoreSession() {
     if (!Array.isArray(saved)) saved = [];
   } catch { saved = []; }
 
-  // Eski ILOVE12C kalıntılarını yeni ILOVE12CBRO ile değiştir
+  // Eski ILOVE12C kalintilarini yeni ILOVE12CBRO ile degistir.
   saved = saved.map(c => c === 'ILOVE12C' ? 'ILOVE12CBRO' : c);
-
   memberships = [...new Set(saved.filter(x => typeof x === 'string' && x))];
+
   const valid = [];
   for (const code of memberships) {
     try {
@@ -156,7 +162,6 @@ async function restoreSession() {
   if (memberships.length) {
     await switchLeague(memberships[0]);
   } else {
-    // Hiç geçerli oturum yoksa giriş ekranında kal
     $('entryView').classList.remove('hidden');
     $('appView').classList.add('hidden');
   }
@@ -239,8 +244,16 @@ $('leagueSelect').addEventListener('change', async e => {
 function listen() {
   if (unsubMatches) unsubMatches();
   if (unsubPlayers) unsubPlayers();
-  matches = []; players = [];
-  renderMatches(); renderAdminMatches(); renderTable();
+  if (unsubBonusSelections) unsubBonusSelections();
+
+  matches = [];
+  players = [];
+  bonusSelections = [];
+
+  renderMatches();
+  renderAdminMatches();
+  renderTable();
+  renderBonusPanel();
 
   if (!groupCode) return;
 
@@ -248,51 +261,89 @@ function listen() {
     query(collection(db, 'groups', groupCode, 'matches'), orderBy('kickoff', 'asc')),
     snap => {
       matches = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      renderMatches(); renderAdminMatches(); renderTable();
+      renderMatches();
+      renderAdminMatches();
+      renderTable();
+      renderBonusPanel();
     },
     err => console.error('Maç dinleme hatası:', err)
   );
+
   unsubPlayers = onSnapshot(
     collection(db, 'groups', groupCode, 'players'),
-    snap => { players = snap.docs.map(d => ({ id: d.id, ...d.data() })); renderTable(); },
+    snap => {
+      players = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      renderTable();
+      renderBonusPanel();
+    },
     err => console.error('Oyuncu dinleme hatası:', err)
   );
+
+  unsubBonusSelections = onSnapshot(
+    collection(db, 'groups', groupCode, 'bonusSelections'),
+    snap => {
+      bonusSelections = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      renderMatches();
+      renderAdminMatches();
+      renderTable();
+      renderBonusPanel();
+    },
+    err => {
+      console.error('Bonus seçimleri dinleme hatası:', err);
+      const status = $('bonusStatus');
+      if (status) status.textContent = 'Bonus seçimleri okunamadı. Firestore Rules ayarlarını kontrol et.';
+    }
+  );
+}
+
+function bonusMatchIds() {
+  return new Set(bonusSelections.map(selection => selection.matchId).filter(Boolean));
 }
 
 function renderMatches() {
   const countEl = $('matchCount');
   if (countEl) countEl.textContent = `${matches.length} MAÇ`;
+
   const el = $('matchesList');
   if (!el) return;
-  if (!matches.length) { el.innerHTML = '<div class="empty">Henüz maç eklenmedi.</div>'; return; }
-  
+
+  if (!matches.length) {
+    el.innerHTML = '<div class="empty">Henüz maç eklenmedi.</div>';
+    return;
+  }
+
+  const bonusIds = bonusMatchIds();
+
   el.innerHTML = matches.map(m => {
     const p = predictionFor(m), locked = isLocked(m);
     let buttonText = p ? 'Düzenle' : 'Tahmin et';
+
     if (!m.predictionOpenAt || !m.predictionCloseAt) buttonText = 'Saatler belirlenmemiş';
     else if (Date.now() < toDate(m.predictionOpenAt).getTime()) buttonText = 'Henüz açılmadı';
     else if (Date.now() >= toDate(m.predictionCloseAt).getTime()) buttonText = 'Tahmin kapandı';
 
     let othersHtml = '';
+
     if (p && m.predictions) {
       const otherEntries = Object.entries(m.predictions).filter(([userId]) => userId !== uid);
+
       if (otherEntries.length > 0) {
-        othersHtml = `<div class="others-predictions" style="margin-top: 8px; font-size: 0.85rem; border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 6px;">
-          <div style="font-weight: bold; margin-bottom: 4px; color: var(--accent, #3b82f6);">Diğer Oyuncuların Tahminleri:</div>
-          <ul style="list-style: none; padding: 0; margin: 0;">
+        othersHtml = `<div class="others-predictions" style="margin-top:8px;font-size:.85rem;border-top:1px dashed rgba(255,255,255,.1);padding-top:6px;">
+          <div style="font-weight:bold;margin-bottom:4px;color:var(--accent,#3b82f6);">Diğer Oyuncuların Tahminleri:</div>
+          <ul style="list-style:none;padding:0;margin:0;">
             ${otherEntries.map(([userId, pred]) => `<li><b>${safe(pred.playerName || 'Oyuncu')}:</b> ${pred.home} - ${pred.away}</li>`).join('')}
           </ul>
         </div>`;
       } else {
-        othersHtml = `<div class="others-predictions" style="margin-top: 8px; font-size: 0.85rem; color: #888;">Diğer oyuncular henüz bu maça tahmin yapmamış.</div>`;
+        othersHtml = '<div class="others-predictions" style="margin-top:8px;font-size:.85rem;color:#888;">Diğer oyuncular henüz bu maça tahmin yapmamış.</div>';
       }
     } else {
-      othersHtml = `<div class="others-predictions-warning" style="margin-top: 8px; font-size: 0.8rem; color: #f59e0b; background: rgba(245, 158, 11, 0.1); padding: 6px; border-radius: 4px;">⚠️ Diğer kullanıcıların tahminlerini görebilmek için önce kendi tahminini yapmalısın!</div>`;
+      othersHtml = '<div class="others-predictions-warning" style="margin-top:8px;font-size:.8rem;color:#f59e0b;background:rgba(245,158,11,.1);padding:6px;border-radius:4px;">Tahminini kaydettikten sonra diğer kullanıcıların tahminlerini görebilirsin.</div>';
     }
 
     return `<article class="match-card">
       <div>
-        <div class="match-meta">${safe(m.competition || 'FUTBOL')} · ${dateText(m.kickoff)}</div>
+        <div class="match-meta">${safe(m.competition || 'FUTBOL')} · ${dateText(m.kickoff)} ${bonusIds.has(m.id) ? '<span style="display:inline-block;margin-left:6px;padding:3px 7px;border-radius:5px;background:rgba(245,158,11,.18);color:#fbbf24;font-weight:800;">⭐ BONUS 2X</span>' : ''}</div>
         <div class="teams"><span>${safe(m.homeTeam)}</span><span class="vs">VS</span><span>${safe(m.awayTeam)}</span></div>
         <div class="match-meta">${safe(predictionStatus(m))}</div>
       </div>
@@ -303,30 +354,31 @@ function renderMatches() {
         </div>
         <button class="small-btn" data-predict="${safe(m.id)}" ${locked ? 'disabled' : ''}>${buttonText}</button>
       </div>
-      <div style="grid-column: 1 / -1; width: 100%;">
-        ${othersHtml}
-      </div>
+      <div style="grid-column:1 / -1;width:100%;">${othersHtml}</div>
     </article>`;
   }).join('');
 
-  el.querySelectorAll('[data-predict]').forEach(b => b.addEventListener('click', () => openPrediction(b.dataset.predict)));
+  el.querySelectorAll('[data-predict]').forEach(b =>
+    b.addEventListener('click', () => openPrediction(b.dataset.predict))
+  );
 }
 
 function openPrediction(id) {
   activeMatch = matches.find(m => m.id === id);
   if (!activeMatch || isLocked(activeMatch)) return;
+
   const p = predictionFor(activeMatch);
   $('predictionTitle').textContent = `${activeMatch.homeTeam} - ${activeMatch.awayTeam}`;
   $('predictionKickoff').textContent = dateText(activeMatch.kickoff);
   $('homePrediction').value = p?.home ?? '';
   $('awayPrediction').value = p?.away ?? '';
   message($('predictionMessage'), '');
-  
+
   const modalWarning = $('modalPredictionWarning');
   if (modalWarning) {
     if (!p) {
       modalWarning.style.display = 'block';
-      modalWarning.textContent = '⚠️ Not: Tahminini kaydettikten sonra bu maç için diğer kullanıcıların tahminlerini de görüntüleyebileceksin.';
+      modalWarning.textContent = 'Not: Tahminini kaydettikten sonra bu maç için diğer kullanıcıların tahminlerini de görüntüleyebilirsin.';
     } else {
       modalWarning.style.display = 'none';
     }
@@ -337,35 +389,44 @@ function openPrediction(id) {
 
 $('predictionForm').addEventListener('submit', async e => {
   e.preventDefault();
+
   const msg = $('predictionMessage');
   if (!activeMatch || isLocked(activeMatch)) return message(msg, 'Bu maçın tahmin süresi açık değil veya sona erdi.');
+
   const hRaw = $('homePrediction').value, aRaw = $('awayPrediction').value;
   const h = Number(hRaw), a = Number(aRaw);
   const invalid = n => !Number.isInteger(n) || n < 0 || n > 30;
-  if (hRaw === '' || aRaw === '' || invalid(h) || invalid(a)) return message(msg, '0 ile 30 arasında tam sayı gir.');
+
+  if (hRaw === '' || aRaw === '' || invalid(h) || invalid(a))
+    return message(msg, '0 ile 30 arasında tam sayı gir.');
+
   try {
     await updateDoc(doc(db, 'groups', groupCode, 'matches', activeMatch.id), {
       [`predictions.${uid}`]: { home: h, away: a, playerName: player.name, updatedAt: Date.now() }
     });
     $('predictionDialog').close();
   } catch (err) {
-    console.error(err); message(msg, 'Tahmin kaydedilemedi: ' + err.message);
+    console.error(err);
+    message(msg, 'Tahmin kaydedilemedi: ' + err.message);
   }
 });
 
 $('matchForm').addEventListener('submit', async e => {
   e.preventDefault();
   if (!isAdmin()) return alert('Yönetici yetkisi yok.');
+
   const kickoff = fromLocalInput($('kickoff').value);
   const predictionOpenAt = fromLocalInput($('predictionOpenAt').value);
   const predictionCloseAt = fromLocalInput($('predictionCloseAt').value);
   const homeTeam = $('homeTeam').value.trim(), awayTeam = $('awayTeam').value.trim();
   const competition = $('competition').value.trim() || 'Futbol';
+
   if (!homeTeam || !awayTeam) return message($('matchFormMessage'), 'İki takımın adını da gir.');
   if (!kickoff || !predictionOpenAt || !predictionCloseAt) return message($('matchFormMessage'), 'Bütün tarih alanlarını doldur.');
   if (kickoff <= new Date()) return message($('matchFormMessage'), 'Maç tarihi gelecekte olmalı.');
   if (predictionCloseAt <= predictionOpenAt) return message($('matchFormMessage'), 'Tahmin kapanışı açılıştan sonra olmalı.');
   if (predictionCloseAt > kickoff) return message($('matchFormMessage'), 'Tahmin kapanışı maç başlangıcından sonra olamaz.');
+
   try {
     const matchRef = doc(collection(db, 'groups', groupCode, 'matches'));
     const matchData = {
@@ -374,109 +435,339 @@ $('matchForm').addEventListener('submit', async e => {
       predictionCloseAt: Timestamp.fromDate(predictionCloseAt),
       createdAt: serverTimestamp(), createdBy: uid, predictions: {}
     };
+
     await Promise.all(SHARED_LEAGUES.map(code =>
       setDoc(doc(db, 'groups', code, 'matches', matchRef.id), matchData)
     ));
+
     e.target.reset();
-    message($('matchFormMessage'), 'Maç ve tahmin takvimi eklendi.', false);
+    message($('matchFormMessage'), 'Maç ve tahmin takvimi iki lige de eklendi.', false);
   } catch (err) {
-    console.error(err); message($('matchFormMessage'), 'Maç eklenemedi: ' + err.message);
+    console.error(err);
+    message($('matchFormMessage'), 'Maç eklenemedi: ' + err.message);
   }
 });
 
 function renderAdminMatches() {
   const el = $('adminMatches');
   if (!el) return;
-  if (!matches.length) { el.innerHTML = '<div class="empty">Henüz maç yok.</div>'; return; }
+
+  if (!matches.length) {
+    el.innerHTML = '<div class="empty">Henüz maç yok.</div>';
+    return;
+  }
+
+  const bonusIds = bonusMatchIds();
+
   el.innerHTML = matches.map(m => `<article class="match-card admin-match-card">
-    <div><div class="match-meta">${dateText(m.kickoff)}</div>
-    <div class="teams"><span>${safe(m.homeTeam)}</span><span class="vs">VS</span><span>${safe(m.awayTeam)}</span></div>
-    <div class="match-meta">${safe(predictionStatus(m))}</div></div>
+    <div>
+      <div class="match-meta">${dateText(m.kickoff)} ${bonusIds.has(m.id) ? '<span style="color:#fbbf24;font-weight:800;">⭐ BONUS 2X</span>' : ''}</div>
+      <div class="teams"><span>${safe(m.homeTeam)}</span><span class="vs">VS</span><span>${safe(m.awayTeam)}</span></div>
+      <div class="match-meta">${safe(predictionStatus(m))}</div>
+    </div>
     <div class="admin-match-settings">
       <label>Tahmin açılışı<input type="datetime-local" id="open-${safe(m.id)}" value="${safe(toLocalInput(m.predictionOpenAt))}"></label>
       <label>Tahmin kapanışı<input type="datetime-local" id="close-${safe(m.id)}" value="${safe(toLocalInput(m.predictionCloseAt))}"></label>
       <button class="small-btn" data-save-schedule="${safe(m.id)}">Saatleri kaydet</button>
       ${hasResult(m) ? `<b>Sonuç: ${m.homeScore} - ${m.awayScore}</b>` : `
-        <div class="two-col"><label>Ev skoru<input id="h-${safe(m.id)}" type="number" min="0" max="30"></label>
-        <label>Dep. skoru<input id="a-${safe(m.id)}" type="number" min="0" max="30"></label></div>
+        <div class="two-col">
+          <label>Ev skoru<input id="h-${safe(m.id)}" type="number" min="0" max="30"></label>
+          <label>Dep. skoru<input id="a-${safe(m.id)}" type="number" min="0" max="30"></label>
+        </div>
         <button class="small-btn" data-result="${safe(m.id)}">Sonucu kaydet</button>`}
-    </div></article>`).join('');
+    </div>
+  </article>`).join('');
 
   el.querySelectorAll('[data-save-schedule]').forEach(button => button.addEventListener('click', async () => {
     const id = button.dataset.saveSchedule;
     const open = fromLocalInput($(`open-${id}`).value), close = fromLocalInput($(`close-${id}`).value);
     const match = matches.find(m => m.id === id);
+
     if (!open || !close) return alert('İki tahmin tarihini de gir.');
     if (close <= open) return alert('Kapanış açılıştan sonra olmalı.');
     if (close > toDate(match.kickoff)) return alert('Tahmin kapanışı maç başlangıcından sonra olamaz.');
+
     button.disabled = true;
+
     try {
       await Promise.all(SHARED_LEAGUES.map(code => updateDoc(doc(db, 'groups', code, 'matches', id), {
-        predictionOpenAt: Timestamp.fromDate(open), predictionCloseAt: Timestamp.fromDate(close)
+        predictionOpenAt: Timestamp.fromDate(open),
+        predictionCloseAt: Timestamp.fromDate(close)
       })));
       alert('Bu maçın tahmin saatleri güncellendi.');
-    } catch (err) { console.error(err); alert('Saatler kaydedilemedi: ' + err.message); }
-    finally { button.disabled = false; }
+    } catch (err) {
+      console.error(err);
+      alert('Saatler kaydedilemedi: ' + err.message);
+    } finally {
+      button.disabled = false;
+    }
   }));
 
   el.querySelectorAll('[data-result]').forEach(button => button.addEventListener('click', async () => {
     if (!isAdmin()) return alert('Yönetici yetkisi yok.');
-    const id = button.dataset.result, hRaw = $(`h-${id}`).value, aRaw = $(`a-${id}`).value;
+
+    const id = button.dataset.result;
+    const hRaw = $(`h-${id}`).value, aRaw = $(`a-${id}`).value;
     const h = Number(hRaw), a = Number(aRaw);
-    if (hRaw === '' || aRaw === '' || !Number.isInteger(h) || !Number.isInteger(a) || h < 0 || a < 0 || h > 30 || a > 30)
+
+    if (hRaw === '' || aRaw === '' || !Number.isInteger(h) || !Number.isInteger(a) ||
+        h < 0 || a < 0 || h > 30 || a > 30)
       return alert('0-30 arasında iki geçerli skor gir.');
+
     button.disabled = true;
+
     try {
       await Promise.all(SHARED_LEAGUES.map(code => updateDoc(doc(db, 'groups', code, 'matches', id), {
         homeScore: h, awayScore: a, resultAt: serverTimestamp()
       })));
-    } catch (err) { console.error(err); alert('Sonuç kaydedilemedi: ' + err.message); button.disabled = false; }
+    } catch (err) {
+      console.error(err);
+      alert('Sonuç kaydedilemedi: ' + err.message);
+      button.disabled = false;
+    }
   }));
 }
 
-function pointsFor(m, p) {
+function pointsFor(m, p, bonusIds = bonusMatchIds()) {
   if (!hasResult(m) || !p) return 0;
-  if (p.home === m.homeScore && p.away === m.awayScore) return 3;
-  return Math.sign(m.homeScore - m.awayScore) === Math.sign(p.home - p.away) ? 1 : 0;
+
+  const exact = p.home === m.homeScore && p.away === m.awayScore;
+  const sameOutcome = Math.sign(m.homeScore - m.awayScore) === Math.sign(p.home - p.away);
+  const basePoints = exact ? 3 : (sameOutcome ? 1 : 0);
+
+  return basePoints * (bonusIds.has(m.id) ? 2 : 1);
+}
+
+function calculateStandings() {
+  const finished = matches.filter(hasResult);
+  const bonusIds = bonusMatchIds();
+
+  return players.map(p => ({
+    ...p,
+    pts: finished.reduce((sum, m) => sum + pointsFor(m, m.predictions?.[p.id], bonusIds), 0),
+    played: finished.length
+  })).sort((a, b) => b.pts - a.pts || a.name.localeCompare(b.name, 'tr'));
 }
 
 function renderTable() {
   const leaderboardEl = $('leaderboard');
   if (!leaderboardEl) return;
-  const finished = matches.filter(hasResult);
-  const totals = players.map(p => ({
-    ...p,
-    pts: finished.reduce((sum, m) => sum + pointsFor(m, m.predictions?.[p.id]), 0),
-    played: finished.length
-  })).sort((a, b) => b.pts - a.pts || a.name.localeCompare(b.name, 'tr'));
+
+  const totals = calculateStandings();
+
   leaderboardEl.innerHTML = totals.length ? totals.map((p, i) =>
-    `<tr><td>${i + 1}</td><td>${safe(p.name)}${p.id === uid ? ' (Sen)' : ''}</td><td>${p.played}</td><td>${p.pts}</td></tr>`
+    `<tr><td>${i + 1}</td><td>${safe(p.name)}${p.id === uid ? ' (Sen)' : ''}</td><td>${p.played}</td><td><b>${p.pts}</b></td></tr>`
   ).join('') : '<tr><td colspan="4" class="empty">Henüz oyuncu yok.</td></tr>';
 }
 
+function groupBonusSelections(selections) {
+  const groups = new Map();
+
+  for (const selection of selections) {
+    if (!groups.has(selection.matchId)) groups.set(selection.matchId, []);
+    groups.get(selection.matchId).push(selection);
+  }
+
+  return [...groups.entries()].map(([matchId, entries]) => ({
+    matchId, entries, first: entries[0]
+  }));
+}
+
+function renderBonusList(items, emptyText) {
+  if (!items.length) return `<div class="match-meta" style="padding:8px 0;">${safe(emptyText)}</div>`;
+
+  return items.map(group => {
+    const first = group.first;
+    const names = [...new Set(group.entries.map(x => x.playerName || 'Oyuncu'))];
+    const match = matches.find(m => m.id === group.matchId);
+    const home = match?.homeTeam || first.homeTeam || 'Ev sahibi';
+    const away = match?.awayTeam || first.awayTeam || 'Deplasman';
+
+    return `<div class="match-card" style="margin:8px 0;">
+      <div>
+        <div class="match-meta">⭐ BONUS 2X · ${safe(first.targetDate || '')}</div>
+        <div class="teams"><span>${safe(home)}</span><span class="vs">VS</span><span>${safe(away)}</span></div>
+        <div class="match-meta">Seçen: ${names.map(safe).join(', ')}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function getBonusContext() {
+  const today = dayKey();
+  const yesterday = shiftDayKey(today, -1);
+  const tomorrow = shiftDayKey(today, 1);
+
+  const standings = calculateStandings();
+  const lowestPoints = standings.length ? Math.min(...standings.map(p => p.pts)) : null;
+  const lastPlacePlayers = lowestPoints === null
+    ? []
+    : standings.filter(p => p.pts === lowestPoints);
+
+  const todayMatches = matches.filter(m => dayKey(m.kickoff) === today);
+  const unfinishedToday = todayMatches.filter(m => !hasResult(m));
+  const tomorrowMatches = matches.filter(m => dayKey(m.kickoff) === tomorrow && !hasResult(m));
+
+  const myTodaySelection = bonusSelections.find(s => s.uid === uid && s.selectionDay === today);
+  const myYesterdaySelection = bonusSelections.find(s => s.uid === uid && s.selectionDay === yesterday);
+
+  const isLastPlace = lastPlacePlayers.some(p => p.id === uid);
+
+  return {
+    today, yesterday, tomorrow, standings, lastPlacePlayers,
+    todayMatches, unfinishedToday, tomorrowMatches,
+    myTodaySelection, myYesterdaySelection, isLastPlace
+  };
+}
+
+function renderBonusPanel() {
+  const todayList = $('todayBonusList');
+  const tomorrowList = $('tomorrowBonusList');
+  const status = $('bonusStatus');
+  const options = $('bonusOptions');
+
+  if (!todayList || !tomorrowList || !status || !options) return;
+
+  const today = dayKey();
+  const tomorrow = shiftDayKey(today, 1);
+
+  const activeToday = groupBonusSelections(bonusSelections.filter(s => s.targetDate === today));
+  const selectedForTomorrow = groupBonusSelections(
+    bonusSelections.filter(s => s.selectionDay === today && s.targetDate === tomorrow)
+  );
+
+  todayList.innerHTML = renderBonusList(activeToday, 'Bugün için henüz bonus maç seçilmedi.');
+  tomorrowList.innerHTML = renderBonusList(selectedForTomorrow, 'Yarın için henüz bonus maç seçilmedi.');
+  options.innerHTML = '';
+
+  const ctx = getBonusContext();
+
+  if (!players.length) {
+    status.textContent = 'Bonus seçimi için önce ligde oyuncu bulunmalı.';
+    return;
+  }
+
+  if (ctx.myTodaySelection) {
+    status.textContent = `Bugünkü seçimini yaptın: ${ctx.myTodaySelection.homeTeam} - ${ctx.myTodaySelection.awayTeam}. Aynı gün ikinci seçim yapamazsın.`;
+    return;
+  }
+
+  if (!ctx.isLastPlace) {
+    const names = ctx.lastPlacePlayers.map(p => p.name).join(', ');
+    status.textContent = names
+      ? `Bugünün sonuncusu: ${names}. Seçim hakkı şu an sende değil.`
+      : 'Henüz sonuncu belirlenemedi.';
+    return;
+  }
+
+  if (ctx.myYesterdaySelection) {
+    status.textContent = 'Dün bonus maç seçtiğin için bugün yeniden seçim yapamazsın. Yarın tekrar hak kazanabilirsin.';
+    return;
+  }
+
+  if (ctx.unfinishedToday.length) {
+    status.textContent = `Seçim, bugünün tüm maç sonuçları girildikten sonra açılacak. Sonucu girilmemiş maç sayısı: ${ctx.unfinishedToday.length}.`;
+    return;
+  }
+
+  if (!ctx.tomorrowMatches.length) {
+    status.textContent = 'Yarın için henüz oynanmamış maç eklenmemiş. Fikstür eklendiğinde seçim yapabilirsin.';
+    return;
+  }
+
+  status.textContent = 'Sonuncular arasındasın! Yarın için bir bonus maç seç. Seçilen maçın puanları iki kat sayılacak.';
+
+  options.innerHTML = ctx.tomorrowMatches.map(m => `<article class="match-card" style="margin:8px 0;">
+    <div>
+      <div class="match-meta">${safe(m.competition || 'FUTBOL')} · ${dateText(m.kickoff)}</div>
+      <div class="teams"><span>${safe(m.homeTeam)}</span><span class="vs">VS</span><span>${safe(m.awayTeam)}</span></div>
+    </div>
+    <button class="small-btn" type="button" data-bonus-match="${safe(m.id)}">Bu maçı bonus seç</button>
+  </article>`).join('');
+
+  options.querySelectorAll('[data-bonus-match]').forEach(button => {
+    button.addEventListener('click', () => selectBonusMatch(button.dataset.bonusMatch));
+  });
+}
+
+async function selectBonusMatch(matchId) {
+  const ctx = getBonusContext();
+  const match = matches.find(m => m.id === matchId);
+
+  if (!match) return alert('Maç bulunamadı. Sayfayı yenileyip tekrar dene.');
+  if (!ctx.isLastPlace) return alert('Bu ligde bugünün sonuncuları arasında değilsin.');
+  if (ctx.myTodaySelection) return alert('Bugün zaten bir bonus maç seçtin.');
+  if (ctx.myYesterdaySelection) return alert('Dün seçim yaptığın için bugün seçim yapamazsın.');
+  if (ctx.unfinishedToday.length) return alert('Bugünün bütün maç sonuçları girilmeden seçim yapılamaz.');
+  if (dayKey(match.kickoff) !== ctx.tomorrow || hasResult(match))
+    return alert('Yalnızca yarın oynanacak, sonucu girilmemiş maçlardan seçebilirsin.');
+
+  const selectionId = `${ctx.today}_${uid}`;
+  const selectionRef = doc(db, 'groups', groupCode, 'bonusSelections', selectionId);
+  const yesterdayRef = doc(db, 'groups', groupCode, 'bonusSelections', `${ctx.yesterday}_${uid}`);
+  const matchRef = doc(db, 'groups', groupCode, 'matches', matchId);
+
+  try {
+    const [existingSnap, yesterdaySnap, latestMatchSnap] = await Promise.all([
+      getDoc(selectionRef),
+      getDoc(yesterdayRef),
+      getDoc(matchRef)
+    ]);
+
+    if (existingSnap.exists()) return alert('Bugün zaten bonus maç seçmişsin.');
+    if (yesterdaySnap.exists()) return alert('Dün seçim yaptığın için bugün seçim yapamazsın.');
+    if (!latestMatchSnap.exists()) return alert('Maç artık bulunamıyor.');
+
+    const latestMatch = latestMatchSnap.data();
+
+    if (!latestMatch.kickoff ||
+        dayKey(latestMatch.kickoff) !== ctx.tomorrow ||
+        toDate(latestMatch.kickoff).getTime() <= Date.now()) {
+      return alert('Bu maç için seçim süresi sona ermiş.');
+    }
+
+    await setDoc(selectionRef, {
+      uid,
+      playerName: player.name,
+      matchId,
+      homeTeam: latestMatch.homeTeam,
+      awayTeam: latestMatch.awayTeam,
+      selectionDay: ctx.today,
+      targetDate: ctx.tomorrow,
+      selectedAt: serverTimestamp()
+    });
+
+    alert(`${latestMatch.homeTeam} - ${latestMatch.awayTeam} yarının bonus maçı olarak seçildi!`);
+  } catch (err) {
+    console.error('Bonus maç seçim hatası:', err);
+    alert('Bonus maç kaydedilemedi: ' + (err.message || err));
+  }
+}
+
+/* Sekme geçişleri */
 document.querySelectorAll('.tab').forEach(button => button.addEventListener('click', () => {
   if (button.dataset.tab === 'admin' && !isAdmin()) return;
   activateTab(button.dataset.tab);
 }));
 
-/* Eski maçları diğer lige aktar butonu işlevselliği */
+/* Eski maçları diğer lige aktar butonu */
 const bulkMigrateBtn = $('bulkMigrateBtn');
+
 if (bulkMigrateBtn) {
   bulkMigrateBtn.addEventListener('click', async () => {
     if (!isAdmin()) return alert('Yönetici yetkisi yok.');
-    
+
     const sourceLeague = 'BARBAROS26';
     const targetLeague = 'ILOVE12CBRO';
 
-    if (!confirm(`groups/${sourceLeague}/matches koleksiyonundaki bütün maçlar groups/${targetLeague}/matches koleksiyonuna (tahminler hariç, mevcut maçların üzerine yazılmadan) aktarılacaktır. Emin misiniz?`)) {
+    if (!confirm(`groups/${sourceLeague}/matches koleksiyonundaki bütün maçlar groups/${targetLeague}/matches koleksiyonuna (tahminler hariç, mevcut maçların üzerine yazılmadan) aktarılacaktır. Emin misiniz?`))
       return;
-    }
 
     bulkMigrateBtn.disabled = true;
+
     try {
       const sourceSnapshot = await getDocs(collection(db, 'groups', sourceLeague, 'matches'));
-      let copiedCount = 0;
-      let skippedCount = 0;
+      let copiedCount = 0, skippedCount = 0;
 
       for (const sourceDoc of sourceSnapshot.docs) {
         const matchId = sourceDoc.id;
@@ -509,24 +800,37 @@ $('editNameButton').addEventListener('click', () => {
   message($('nameMessage'), '');
   $('nameDialog').showModal();
 });
+
 $('closeNameDialog').addEventListener('click', () => $('nameDialog').close());
 
 $('nameForm').addEventListener('submit', async e => {
   e.preventDefault();
+
   const newName = $('newPlayerName').value.trim(), msg = $('nameMessage');
+
   if (!validName(newName)) return message(msg, 'İsim 2-18 karakter arasında olmalı.');
   if (newName === player.name) return $('nameDialog').close();
+
   try {
     for (const code of memberships) {
       const all = await getDocs(collection(db, 'groups', code, 'players'));
       if (all.docs.some(d => d.id !== uid && (d.data().name || '').toLowerCase() === newName.toLowerCase()))
         throw new Error(`${code} liginde bu oyuncu adı zaten kullanılıyor.`);
     }
+
     await Promise.all(memberships.map(code =>
       updateDoc(doc(db, 'groups', code, 'players', uid), { name: newName })
     ));
-    player.name = newName; showApp(); renderTable(); $('nameDialog').close();
-  } catch (err) { console.error(err); message(msg, 'İsim değiştirilemedi: ' + err.message); }
+
+    player.name = newName;
+    showApp();
+    renderTable();
+    renderBonusPanel();
+    $('nameDialog').close();
+  } catch (err) {
+    console.error(err);
+    message(msg, 'İsim değiştirilemedi: ' + err.message);
+  }
 });
 
 $('leaveButton').addEventListener('click', () => {
@@ -537,7 +841,13 @@ $('leaveButton').addEventListener('click', () => {
   }
 });
 
-setInterval(() => { if (player) renderMatches(); }, 15000);
+setInterval(() => {
+  if (player) {
+    renderMatches();
+    renderBonusPanel();
+  }
+}, 15000);
+
 boot().catch(err => {
   console.error(err);
   message($('entryMessage'), 'HATA: ' + (err.code || err.message || 'Bilinmeyen hata'));
