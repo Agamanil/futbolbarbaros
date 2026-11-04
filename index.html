@@ -6,6 +6,63 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>FUTBOLBARBAROS - Çoklu Lig Tahmin Sistemi</title>
   <link rel="stylesheet" href="style.css">
+  <style>
+    /* 24-26 Kasım sezon paneli */
+    #bonusPanel { display: none !important; }
+    .season-panel { margin: 0 0 20px; padding: 20px; }
+    .season-kicker { color: var(--green, #b7f36b); font-size: 10px; letter-spacing: 1.8px; font-weight: 800; margin-bottom: 8px; }
+    .season-muted { color: var(--muted, #a6b9aa); font-size: 12px; }
+    .season-day-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
+    .season-day-card { border: 1px solid #ffffff1c; background: #071e14aa; border-radius: 12px; padding: 13px; min-width: 0; }
+    .season-day-card.done { border-color: #b7f36b55; }
+    .season-day-date { font-weight: 800; color: var(--green, #b7f36b); font-size: 13px; }
+    .season-day-count { color: #b8cbbc; font-size: 11px; margin: 5px 0; }
+    .season-day-detail { color: #e5eee7; font-size: 11px; line-height: 1.6; overflow-wrap: anywhere; }
+    .season-bonus-match, .season-choice-card { display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid #ffffff1c; background: #071e14aa; border-radius: 12px; padding: 12px; margin-top: 9px; }
+    .season-bonus-match strong, .season-choice-card strong { display: block; font-size: 14px; }
+    .season-bonus-match small, .season-choice-card small { display: block; color: var(--muted, #a6b9aa); font-size: 10px; margin-bottom: 5px; }
+    .season-bonus-match > span { flex: 0 0 auto; color: #14210f; background: #f2c14e; border-radius: 8px; padding: 7px 9px; font-weight: 900; }
+    .season-select-btn { flex: 0 0 auto; border: 0; border-radius: 8px; padding: 10px 12px; background: var(--green, #b7f36b); color: #102315; font-size: 11px; font-weight: 900; cursor: pointer; }
+    .season-select-btn:hover { filter: brightness(1.08); }
+    .season-table-wrap { overflow-x: auto; border: 1px solid #ffffff1a; border-radius: 13px; }
+    .season-table { width: 100%; border-collapse: collapse; text-align: left; }
+    .season-table th { color: var(--muted, #a6b9aa); font-size: 10px; padding: 12px; background: #102f20; }
+    .season-table td { padding: 13px 12px; border-top: 1px solid #ffffff12; font-size: 12px; }
+    .season-table td:last-child { color: var(--green, #b7f36b); font-weight: 900; }
+    .season-you { color: var(--green, #b7f36b); font-size: 10px; }
+    .honor-section { margin-top: 22px; padding: 20px; border: 1px solid #d6b65b55; border-radius: 18px; background: radial-gradient(ellipse at 50% 0%, #634b1f33, transparent 65%), #0a2117; }
+    .honor-heading { text-align: center; color: #f2d27a; font: 800 26px 'Barlow Condensed', sans-serif; letter-spacing: 1px; margin-bottom: 5px; }
+    .honor-status { text-align: center; color: var(--muted, #a6b9aa); font-size: 11px; line-height: 1.5; margin-bottom: 15px; }
+    .honor-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .honor-card { min-width: 0; border: 1px solid #ffffff18; border-radius: 15px; padding: 12px 8px; text-align: center; background: #07180f99; }
+    .honor-card.king { border-color: #d6b65b66; }
+    .honor-card.last { border-color: #9ca3af44; }
+    .honor-figure { width: min(100%, 210px); height: auto; display: block; margin: 0 auto 4px; }
+    .honor-role { color: #e9d28d; font-size: 10px; font-weight: 900; letter-spacing: 1.7px; margin: 3px 0 7px; }
+    .honor-card.last .honor-role { color: #b5c0b8; }
+    .honor-name { min-height: 20px; color: #fff; font-size: 14px; font-weight: 900; overflow-wrap: anywhere; }
+    .honor-subtitle { margin-top: 4px; color: var(--muted, #a6b9aa); font-size: 10px; }
+    .season-divider { border: 0; border-top: 1px solid #ffffff16; margin: 17px 0; }
+
+    /* Yönetici maç kopyalama menüsü */
+    .copy-match-check { display: flex; align-items: center; gap: 7px; font-size: 11px; color: var(--green, #b7f36b); margin-bottom: 8px; }
+    .copy-match-check input, .copy-all-row input { width: auto; accent-color: var(--green, #b7f36b); }
+    .copy-tools-grid { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: end; margin-top: 12px; }
+    .copy-tools-grid select { width: 100%; min-width: 0; }
+    .copy-all-row { display: flex; align-items: center; gap: 8px; color: var(--muted, #a6b9aa); font-size: 12px; margin: 10px 0; }
+    #copyMatchesMessage { margin-top: 9px; }
+
+    @media (max-width: 620px) {
+      .season-panel { padding: 15px; }
+      .season-day-grid { grid-template-columns: 1fr; }
+      .honor-grid { gap: 8px; }
+      .honor-card { padding: 8px 5px; }
+      .honor-heading { font-size: 23px; }
+      .season-choice-card { align-items: flex-start; flex-direction: column; }
+      .season-select-btn { width: 100%; }
+      .copy-tools-grid { grid-template-columns: 1fr; }
+    }
+  </style>
 </head>
 <body>
   <!-- Giriş Ekranı -->
@@ -48,18 +105,32 @@
 
     <!-- Maçlar Sekmesi -->
     <main id="matchesTab" class="tab-content">
-      <section class="card" id="bonusPanel" style="margin-bottom:18px;">
-        <h3 style="margin-top:0;">🏆 Günlük Bonus Maç Sistemi</h3>
-        <p class="match-meta" style="margin-top:0;">Doğru skor: 6 puan · Doğru sonuç: 2 puan. Her lig kendi bonus seçimlerini ayrı tutar.</p>
-        <h4>Bugünün Bonus Maçları</h4>
-        <div id="todayBonusList" aria-live="polite"></div>
-        <hr style="border:0;border-top:1px solid rgba(255,255,255,.12);margin:14px 0;">
-        <h4>Yarının Bonus Maçını Seç</h4>
-        <p id="bonusStatus" class="match-meta" aria-live="polite">Bonus bilgileri yükleniyor...</p>
+      <section class="card hidden" id="bonusPanel" style="margin-bottom:18px;">
+        <h3>Günlük Bonus Maç Sistemi</h3>
+        <div id="todayBonusList"></div>
+        <p id="bonusStatus"></p>
         <div id="bonusOptions"></div>
-        <hr style="border:0;border-top:1px solid rgba(255,255,255,.12);margin:14px 0;">
-        <h4>Yarın İçin Seçilen Bonus Maçlar</h4>
-        <div id="tomorrowBonusList" aria-live="polite"></div>
+        <div id="tomorrowBonusList"></div>
+      </section>
+
+      <section class="card season-panel" id="seasonPanel">
+        <div class="season-kicker">24–26 KASIM 2026 · SEZON ÖZELİ</div>
+        <h3 style="margin-bottom:6px;">🏆 Günlük Bonus ve Sezon Yarışı</h3>
+        <p id="seasonStatus" class="season-muted">Sezon verileri yükleniyor...</p>
+
+        <h4>Günlük puan durumu</h4>
+        <div id="dailySummary" class="season-day-grid" aria-live="polite"></div>
+
+        <hr class="season-divider">
+
+        <h4>Yarının bonus maçını seç</h4>
+        <p id="seasonBonusStatus" class="season-muted" aria-live="polite">Bonus bilgileri yükleniyor...</p>
+        <div id="seasonBonusChoices"></div>
+
+        <hr class="season-divider">
+
+        <h4>Bugünün bonus maçları</h4>
+        <div id="seasonSelectedBonuses"></div>
       </section>
 
       <div class="section-header">
@@ -71,22 +142,116 @@
     <!-- Puan Tablosu Sekmesi -->
     <main id="tableTab" class="tab-content hidden">
       <div class="section-header">
-        <h3>Puan Tablosu</h3>
+        <h3>24–26 Kasım Sezon Puan Tablosu</h3>
       </div>
-      <div class="table-card">
-        <table class="leaderboard-table">
+
+      <div class="season-table-wrap">
+        <table class="season-table">
           <thead>
             <tr>
               <th>#</th>
               <th>Oyuncu</th>
-              <th>Oynanan</th>
+              <th>Tamamlanan maç</th>
               <th>Puan</th>
             </tr>
+          </thead>
+          <tbody id="seasonLeaderboard">
+            <tr><td colspan="4">Sezon verileri yükleniyor...</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <section class="honor-section" id="honorCorner">
+        <div class="honor-heading">🏅 ONUR KÖŞESİ 🏅</div>
+        <p id="honorStatus" class="honor-status">Taht ve son sıra, sezon tamamlanınca açıklanacak.</p>
+
+        <div class="honor-grid">
+          <article class="honor-card king">
+            <svg class="honor-figure" viewBox="0 0 220 220" role="img" aria-label="Tahtta oturan kral stickman">
+              <defs>
+                <linearGradient id="throneGold" x1="0" x2="1" y1="0" y2="1">
+                  <stop offset="0" stop-color="#ffe69a"/>
+                  <stop offset="1" stop-color="#b98724"/>
+                </linearGradient>
+              </defs>
+
+              <!-- Taht -->
+              <path d="M55 190 L55 77 Q55 55 78 55 L142 55 Q165 55 165 77 L165 190 Z" fill="#5b321b" stroke="url(#throneGold)" stroke-width="7"/>
+              <path d="M72 178 L72 87 Q72 73 87 73 L133 73 Q148 73 148 87 L148 178 Z" fill="#8a4c22" stroke="#e8bd54" stroke-width="3"/>
+              <path d="M42 193 H178 M62 192 V207 M158 192 V207" stroke="#e8bd54" stroke-width="8" stroke-linecap="round"/>
+              <path d="M60 110 H38 V174 H60 M160 110 H182 V174 H160" fill="none" stroke="#e8bd54" stroke-width="9" stroke-linejoin="round"/>
+
+              <!-- Kralın gövdesi ve bacakları -->
+              <g stroke="#f4f0df" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" fill="none">
+                <path d="M110 111 V157"/>
+                <path d="M110 125 L78 145 L61 145"/>
+                <path d="M110 125 L142 145 L159 145"/>
+                <path d="M110 157 L86 181 L72 181"/>
+                <path d="M110 157 L134 181 L148 181"/>
+              </g>
+
+              <!-- Kafa -->
+              <circle cx="110" cy="83" r="27" fill="#f4f0df" stroke="#1b281f" stroke-width="4"/>
+              <text id="winnerHeadText" x="110" y="88" text-anchor="middle" dominant-baseline="middle" font-size="13" font-weight="900" fill="#142319">?</text>
+
+              <!-- Kral tacı -->
+              <path d="M82 52 L76 28 L94 39 L110 17 L126 39 L144 28 L138 52 Z" fill="url(#throneGold)" stroke="#6f4c11" stroke-width="3" stroke-linejoin="round"/>
+              <path d="M83 52 H137 V61 H83 Z" fill="#f0ca62" stroke="#6f4c11" stroke-width="2"/>
+              <circle cx="110" cy="29" r="4" fill="#fff1b6"/>
+            </svg>
+
+            <div class="honor-role">SEZON ŞAMPİYONU</div>
+            <div id="honorWinnerLabel" class="honor-name">?</div>
+            <div class="honor-subtitle">Kral tahtının sahibi</div>
+          </article>
+
+          <article class="honor-card last">
+            <svg class="honor-figure" viewBox="0 0 220 220" role="img" aria-label="Yerde üzgün oturan stickman">
+              <!-- Zemin -->
+              <path d="M26 190 H194" stroke="#829188" stroke-width="4" stroke-linecap="round"/>
+
+              <!-- Yerde oturan stickman -->
+              <g stroke="#d9e0db" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" fill="none">
+                <path d="M111 111 Q124 130 120 150"/>
+                <path d="M113 121 L83 142 L63 145"/>
+                <path d="M116 125 L143 145 L160 145"/>
+                <path d="M120 150 L91 170 L66 170"/>
+                <path d="M120 150 L149 170 L174 170"/>
+              </g>
+
+              <circle cx="111" cy="82" r="27" fill="#e7ece8" stroke="#252e29" stroke-width="4"/>
+              <text id="lastHeadText" x="111" y="87" text-anchor="middle" dominant-baseline="middle" font-size="13" font-weight="900" fill="#18221c">?</text>
+
+              <!-- Perişanlık çizgileri -->
+              <path d="M72 55 L62 44 M78 48 L72 34 M147 53 L157 42" stroke="#a8b4ac" stroke-width="3" stroke-linecap="round"/>
+              <path d="M99 115 Q111 107 123 115" stroke="#9ba79e" stroke-width="2" fill="none"/>
+              <circle cx="49" cy="177" r="3" fill="#a8b4ac"/>
+              <circle cx="183" cy="181" r="2" fill="#a8b4ac"/>
+            </svg>
+
+            <div class="honor-role">SEZON SONUNCUSU</div>
+            <div id="honorLastLabel" class="honor-name">?</div>
+            <div class="honor-subtitle">Bu sezon pek iyi gitmedi...</div>
+          </article>
+        </div>
+      </section>
+
+      <div class="section-header" style="margin-top:28px;">
+        <h3>Genel Puan Tablosu</h3>
+      </div>
+
+      <div class="table-card">
+        <table class="leaderboard-table">
+          <thead>
+            <tr><th>#</th><th>Oyuncu</th><th>Oynanan</th><th>Puan</th></tr>
           </thead>
           <tbody id="leaderboard"></tbody>
         </table>
       </div>
-      <p class="match-meta" style="margin:8px 2px 18px;">Bonus maçlarda doğru skor 6, doğru sonuç 2 puandır. Aynı maç birden fazla kişi tarafından seçilse de bonus çarpanı bir kez uygulanır.</p>
+
+      <p class="match-meta" style="margin:8px 2px 18px;">
+        Sezon tablosu yalnızca 24–26 Kasım 2026 maçlarını sayar. Genel tablo tüm maçları içerir. Bonus maçta doğru skor 6, doğru sonuç 2 puandır.
+      </p>
 
       <div class="card join-another-card">
         <h4>Başka Bir Lige Katıl</h4>
@@ -105,27 +270,49 @@
       </div>
 
       <div class="card admin-card">
-        <h4>Toplu Maç Aktarımı</h4>
-        <p class="match-meta">BARBAROS26 ligindeki bütün maçları ILOVE12CBRO ligine (tahminler hariç, mevcut maçların üzerine yazılmadan) topluca kopyalayın.</p>
-        <button id="bulkMigrateBtn" class="primary-btn">Eski maçları diğer lige aktar</button>
+        <h4>Seçili Maçları Başka Lige Kopyala</h4>
+        <p class="match-meta">
+          Kaynak lig, üstte seçili olan ligdir. Aşağıdaki listeden istediğin maçları işaretle ve hedef ligi seç.
+          Tahminler kopyalanmaz; hedef ligde aynı maç zaten varsa üzerine yazılmaz.
+        </p>
+
+        <label class="copy-all-row">
+          <input type="checkbox" id="copySelectAll">
+          Listedeki bütün maçları seç
+        </label>
+
+        <div class="copy-tools-grid">
+          <label>
+            Hedef lig
+            <select id="copyTargetLeague"></select>
+          </label>
+          <button id="copySelectedMatchesBtn" class="primary-btn" type="button">
+            Seçilen maçları kopyala
+          </button>
+        </div>
+
+        <div id="copyMatchesMessage" class="message" aria-live="polite"></div>
       </div>
 
       <div class="card admin-card">
-        <h4>Yeni Maç Ekle</h4>
+        <h4>Aktif Lige Yeni Maç Ekle</h4>
         <form id="matchForm">
           <div class="two-col">
             <label>Ev Sahibi<input type="text" id="homeTeam" required></label>
             <label>Deplasman<input type="text" id="awayTeam" required></label>
           </div>
+
           <div class="two-col">
             <label>Organizasyon<input type="text" id="competition" placeholder="Örn: Süper Lig"></label>
             <label>Maç Başlangıcı<input type="datetime-local" id="kickoff" required></label>
           </div>
+
           <div class="two-col">
             <label>Tahmin Açılış<input type="datetime-local" id="predictionOpenAt" required></label>
             <label>Tahmin Kapanış<input type="datetime-local" id="predictionCloseAt" required></label>
           </div>
-          <button type="submit" class="primary-btn">Maçı Oluştur</button>
+
+          <button type="submit" class="primary-btn">Aktif Lige Maçı Ekle</button>
         </form>
         <div id="matchFormMessage" class="message"></div>
       </div>
@@ -143,15 +330,18 @@
       <h3 id="predictionTitle">Maç Tahmini</h3>
       <p id="predictionKickoff" class="match-meta"></p>
       <div id="modalPredictionWarning" style="font-size:.85rem;color:#f59e0b;background:rgba(245,158,11,.1);padding:8px;border-radius:4px;margin-bottom:10px;display:none;"></div>
+
       <div class="prediction-inputs">
         <label>Ev Sahibi<input type="number" id="homePrediction" min="0" max="30" required></label>
         <span class="vs">-</span>
         <label>Deplasman<input type="number" id="awayPrediction" min="0" max="30" required></label>
       </div>
+
       <div class="modal-actions">
         <button type="button" class="secondary-btn" onclick="document.getElementById('predictionDialog').close()">İptal</button>
         <button type="submit" class="primary-btn">Tahmini Kaydet</button>
       </div>
+
       <div id="predictionMessage" class="message"></div>
     </form>
   </dialog>
@@ -162,14 +352,17 @@
       <h3>Oyuncu Adını Değiştir</h3>
       <label for="newPlayerName">Yeni Ad</label>
       <input type="text" id="newPlayerName" required minlength="2" maxlength="18">
+
       <div class="modal-actions">
         <button type="button" class="secondary-btn" id="closeNameDialog">İptal</button>
         <button type="submit" class="primary-btn">Kaydet</button>
       </div>
+
       <div id="nameMessage" class="message"></div>
     </form>
   </dialog>
 
   <script type="module" src="app.js"></script>
+  <script type="module" src="season.js"></script>
 </body>
 </html>
