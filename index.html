@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="tr">
 <head>
@@ -29,7 +30,7 @@
       <div class="header-left">
         <h2>FUTBOLBARBAROS</h2>
         <div class="league-selector-wrapper">
-          <select id="leagueSelect" style="padding: 6px 12px; border-radius: 6px; background: rgba(255,255,255,0.1); color: inherit; border: 1px solid rgba(255,255,255,0.2); font-weight: bold; cursor: pointer;"></select>
+          <select id="leagueSelect" style="padding:6px 12px;border-radius:6px;background:rgba(255,255,255,0.1);color:inherit;border:1px solid rgba(255,255,255,0.2);font-weight:bold;cursor:pointer;"></select>
         </div>
       </div>
       <div class="header-right">
@@ -47,6 +48,20 @@
 
     <!-- Maçlar Sekmesi -->
     <main id="matchesTab" class="tab-content">
+      <section class="card" id="bonusPanel" style="margin-bottom:18px;">
+        <h3 style="margin-top:0;">🏆 Günlük Bonus Maç Sistemi</h3>
+        <p class="match-meta" style="margin-top:0;">Doğru skor: 6 puan · Doğru sonuç: 2 puan. Her lig kendi bonus seçimlerini ayrı tutar.</p>
+        <h4>Bugünün Bonus Maçları</h4>
+        <div id="todayBonusList" aria-live="polite"></div>
+        <hr style="border:0;border-top:1px solid rgba(255,255,255,.12);margin:14px 0;">
+        <h4>Yarının Bonus Maçını Seç</h4>
+        <p id="bonusStatus" class="match-meta" aria-live="polite">Bonus bilgileri yükleniyor...</p>
+        <div id="bonusOptions"></div>
+        <hr style="border:0;border-top:1px solid rgba(255,255,255,.12);margin:14px 0;">
+        <h4>Yarın İçin Seçilen Bonus Maçlar</h4>
+        <div id="tomorrowBonusList" aria-live="polite"></div>
+      </section>
+
       <div class="section-header">
         <h3 id="matchCount">0 MAÇ</h3>
       </div>
@@ -71,6 +86,7 @@
           <tbody id="leaderboard"></tbody>
         </table>
       </div>
+      <p class="match-meta" style="margin:8px 2px 18px;">Bonus maçlarda doğru skor 6, doğru sonuç 2 puandır. Aynı maç birden fazla kişi tarafından seçilse de bonus çarpanı bir kez uygulanır.</p>
 
       <div class="card join-another-card">
         <h4>Başka Bir Lige Katıl</h4>
@@ -87,8 +103,7 @@
       <div class="section-header">
         <h3>Yönetici Paneli</h3>
       </div>
-      
-      <!-- Eski Maçları Diğer Lige Aktar Bölümü -->
+
       <div class="card admin-card">
         <h4>Toplu Maç Aktarımı</h4>
         <p class="match-meta">BARBAROS26 ligindeki bütün maçları ILOVE12CBRO ligine (tahminler hariç, mevcut maçların üzerine yazılmadan) topluca kopyalayın.</p>
@@ -127,7 +142,7 @@
     <form id="predictionForm" class="card modal-card">
       <h3 id="predictionTitle">Maç Tahmini</h3>
       <p id="predictionKickoff" class="match-meta"></p>
-      <div id="modalPredictionWarning" style="font-size: 0.85rem; color: #f59e0b; background: rgba(245, 158, 11, 0.1); padding: 8px; border-radius: 4px; margin-bottom: 10px; display: none;"></div>
+      <div id="modalPredictionWarning" style="font-size:.85rem;color:#f59e0b;background:rgba(245,158,11,.1);padding:8px;border-radius:4px;margin-bottom:10px;display:none;"></div>
       <div class="prediction-inputs">
         <label>Ev Sahibi<input type="number" id="homePrediction" min="0" max="30" required></label>
         <span class="vs">-</span>
