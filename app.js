@@ -261,7 +261,9 @@ function showApp() {
 
   renderLeagueOptions();
   refreshCopyTargetOptions();
-}function activateTab(name) {
+}
+
+function activateTab(name) {
   document.querySelectorAll('.tab').forEach(tab => {
     tab.classList.toggle('active', tab.dataset.tab === name);
   });
@@ -394,9 +396,7 @@ $('joinForm').addEventListener('submit', async e => {
   }
 
   const code = $('groupCode').value.trim().toUpperCase();
-  const name = $('playerName').value.trim();
-
-  if (!code || !name) return;
+  const name = $('playerName').value.trim();  if (!code || !name) return;
 
   if (!validName(name)) {
     return message(msg, 'İsim 2-18 karakter arasında olmalı.');
@@ -585,7 +585,9 @@ function listen() {
       }
     }
   );
-}function bonusMatchIds() {
+}
+
+function bonusMatchIds() {
   return new Set(
     bonusSelections
       .map(selection => selection.matchId)
@@ -792,8 +794,7 @@ $('matchForm').addEventListener('submit', async e => {
 
     e.target.reset();
 
-    message(
-      $('matchFormMessage'),
+    message(      $('matchFormMessage'),
       `${groupCode} ligine maç eklendi. Diğer liglere aktarmak için aşağıdaki maç kopyalama menüsünü kullan.`,
       false
     );
@@ -801,7 +802,9 @@ $('matchForm').addEventListener('submit', async e => {
     console.error(err);
     message($('matchFormMessage'), 'Maç eklenemedi: ' + err.message);
   }
-});function renderAdminMatches() {
+});
+
+function renderAdminMatches() {
   const el = $('adminMatches');
   if (!el) return;
 
@@ -826,12 +829,15 @@ $('matchForm').addEventListener('submit', async e => {
       <label>Tahmin açılışı<input type="datetime-local" id="open-${safe(m.id)}" value="${safe(toLocalInput(m.predictionOpenAt))}"></label>
       <label>Tahmin kapanışı<input type="datetime-local" id="close-${safe(m.id)}" value="${safe(toLocalInput(m.predictionCloseAt))}"></label>
       <button class="small-btn" data-save-schedule="${safe(m.id)}">Saatleri kaydet</button>
-      ${hasResult(m) ? `<b>Sonuç: ${m.homeScore} - ${m.awayScore}</b>` : `
+      <div style="margin-top:10px;padding:12px;border:1px solid var(--border, rgba(255,255,255,.12));border-radius:10px;">
+        <b style="display:block;margin-bottom:8px;">${hasResult(m) ? `Kayıtlı sonuç: ${m.homeScore} - ${m.awayScore}` : 'Maç sonucu gir'}</b>
         <div class="two-col">
-          <label>Ev skoru<input id="h-${safe(m.id)}" type="number" min="0" max="30"></label>
-          <label>Dep. skoru<input id="a-${safe(m.id)}" type="number" min="0" max="30"></label>
+          <label>Ev skoru<input id="h-${safe(m.id)}" type="number" min="0" max="30" step="1" value="${hasResult(m) ? safe(m.homeScore) : ''}" inputmode="numeric"></label>
+          <label>Dep. skoru<input id="a-${safe(m.id)}" type="number" min="0" max="30" step="1" value="${hasResult(m) ? safe(m.awayScore) : ''}" inputmode="numeric"></label>
         </div>
-        <button class="small-btn" data-result="${safe(m.id)}">Sonucu kaydet</button>`}
+        <button class="small-btn" type="button" data-result="${safe(m.id)}">${hasResult(m) ? 'Skoru güncelle' : 'Sonucu kaydet'}</button>
+        ${hasResult(m) ? '<div class="match-meta" style="margin-top:7px;">Skoru değiştirmek puanları da yeniden hesaplar.</div>' : ''}
+      </div>
     </div>
   </article>`).join('');
 
@@ -888,6 +894,12 @@ $('matchForm').addEventListener('submit', async e => {
       }
 
       const id = button.dataset.result;
+      const currentMatch = matches.find(m => m.id === id);
+
+      if (!currentMatch) {
+        return alert('Maç listede bulunamadı. Sayfayı yenileyip tekrar dene.');
+      }
+
       const hRaw = $(`h-${id}`).value;
       const aRaw = $(`a-${id}`).value;
 
@@ -907,17 +919,45 @@ $('matchForm').addEventListener('submit', async e => {
         return alert('0-30 arasında iki geçerli skor gir.');
       }
 
+      const isCorrection = hasResult(currentMatch);
+      const scoreChanged = currentMatch.homeScore !== h || currentMatch.awayScore !== a;
+
+      if (isCorrection && !scoreChanged) {
+        return alert('Girilen skor zaten kayıtlı. Herhangi bir değişiklik yapılmadı.');
+      }
+
+      if (isCorrection) {
+        const approved = confirm(
+          `${currentMatch.homeTeam} - ${currentMatch.awayTeam} maçının skorunu ${currentMatch.homeScore}-${currentMatch.awayScore} yerine ${h}-${a} olarak değiştirmek istiyor musun?
+
+Oyuncuların puanları yeni sonuca göre güncellenecek.`
+        );
+
+        if (!approved) return;
+      }
+
       button.disabled = true;
 
       try {
+        const scoreUpdate = {
+          homeScore: h,
+          awayScore: a
+        };
+
+        // İlk sonuç girişinde zaman damgası eklenir. Sonradan yapılan
+        // düzeltmeler maçın ilk sonuç kayıt zamanını değiştirmez.
+        if (!isCorrection) {
+          scoreUpdate.resultAt = serverTimestamp();
+        }
+
         await updateDoc(
           doc(db, 'groups', groupCode, 'matches', id),
-          {
-            homeScore: h,
-            awayScore: a,
-            resultAt: serverTimestamp()
-          }
+          scoreUpdate
         );
+
+        alert(isCorrection
+          ? `Skor ${h}-${a} olarak güncellendi. Puan tablosu yeni sonuca göre yenilenecek.`
+          : 'Maç sonucu kaydedildi.');
       } catch (err) {
         console.error(err);
         alert('Sonuç kaydedilemedi: ' + err.message);
@@ -1059,7 +1099,9 @@ function getBonusContext() {
     myYesterdaySelection,
     isLastPlace
   };
-}function renderBonusPanel() {
+}
+
+function renderBonusPanel() {
   const todayList = $('todayBonusList');
   const tomorrowList = $('tomorrowBonusList');
   const status = $('bonusStatus');
@@ -1150,9 +1192,7 @@ function getBonusContext() {
       selectBonusMatch(button.dataset.bonusMatch);
     });
   });
-}
-
-async function selectBonusMatch(matchId) {
+}async function selectBonusMatch(matchId) {
   const ctx = getBonusContext();
   const match = matches.find(m => m.id === matchId);
 
