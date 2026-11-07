@@ -948,6 +948,7 @@ function renderAdminMatches() {
       <label>Tahmin açılışı<input type="datetime-local" id="open-${safe(m.id)}" value="${safe(toLocalInput(m.predictionOpenAt))}"></label>
       <label>Tahmin kapanışı<input type="datetime-local" id="close-${safe(m.id)}" value="${safe(toLocalInput(m.predictionCloseAt))}"></label>
       <button class="small-btn" data-save-schedule="${safe(m.id)}">Saatleri kaydet</button>
+      <button class="danger-btn" type="button" data-delete-match="${safe(m.id)}" style="margin-top:8px;">Maçı sil</button>
       <div style="margin-top:10px;padding:12px;border:1px solid var(--border, rgba(255,255,255,.12));border-radius:10px;">
         <b style="display:block;margin-bottom:8px;">${hasResult(m) ? `Kayıtlı sonuç: ${m.homeScore} - ${m.awayScore}` : 'Maç sonucu gir'}</b>
         <div class="two-col">
@@ -1085,6 +1086,57 @@ Oyuncuların puanları yeni sonuca göre güncellenecek.`
     });
   });
 }
+
+/* Yönetici: maçı aktif ligden sil (tahminler de maçla birlikte silinir). */
+$('adminMatches')?.addEventListener('click', async event => {
+  const button = event.target.closest('[data-delete-match]');
+  if (!button) return;
+
+  if (!isAdmin()) return alert('Yönetici yetkisi yok.');
+
+  const id = button.dataset.deleteMatch;
+  const match = matches.find(m => m.id === id);
+
+  if (!match) {
+    return alert('Maç listede bulunamadı. Sayfayı yenileyip tekrar dene.');
+  }
+
+  const predictionCount = Object.keys(match.predictions || {}).length;
+
+  const approved = confirm(
+    `${match.homeTeam} - ${match.awayTeam} maçı ${groupCode} liginden silinecek.
+
+` +
+    `Bu maça yapılmış ${predictionCount} tahmin ve varsa girilen sonuç da silinecek, puan tablosu yeniden hesaplanacak.
+` +
+    `Bu işlem geri alınamaz. Devam etmek istiyor musun?`
+  );
+
+  if (!approved) return;
+
+  button.disabled = true;
+
+  try {
+    await deleteDoc(doc(db, 'groups', groupCode, 'matches', id));
+
+    // Bu maç bonus seçilmişse seçimleri de temizle ki oyuncu yeniden seçebilsin.
+    const relatedBonuses = bonusSelections.filter(s => s.matchId === id);
+
+    for (const selection of relatedBonuses) {
+      try {
+        await deleteDoc(doc(db, 'groups', groupCode, 'bonusSelections', selection.id));
+      } catch (err) {
+        console.warn('Bonus seçimi silinemedi:', selection.id, err);
+      }
+    }
+
+    alert('Maç silindi.');
+  } catch (err) {
+    console.error('Maç silinemedi:', err);
+    alert('Maç silinemedi: ' + (err.message || err));
+    button.disabled = false;
+  }
+});
 
 function pointsFor(m, p, bonusIds = bonusMatchIds()) {
   if (!hasResult(m) || !p) return 0;
