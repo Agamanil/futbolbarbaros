@@ -1,4 +1,3 @@
-
 // FUTBOLBARBAROS - COKLU LIG + GUNLUK BONUS MAC SISTEMI
 // Firebase Spark (ucretsiz plan) ile calisir. Cloud Functions gerektirmez.
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/13.2.0/firebase-app.js';
@@ -395,19 +394,24 @@ async function boot() {
   const auth = getAuth(app);
   db = getFirestore(app);
 
+  // Kayıtlı anonim oturumun tarayıcıdan geri yüklenmesini bekle;
+  // sadece gerçekten oturum yoksa yeni anonim giriş yap.
   const user = await new Promise((resolve, reject) => {
+    let signingIn = false;
     let unsubscribe = () => {};
 
     unsubscribe = onAuthStateChanged(auth, u => {
       if (u) {
         unsubscribe();
         resolve(u);
+        return;
+      }
+
+      if (!signingIn) {
+        signingIn = true;
+        signInAnonymously(auth).catch(reject);
       }
     }, reject);
-
-    if (!auth.currentUser) {
-      signInAnonymously(auth).catch(reject);
-    }
   });
 
   uid = user.uid;
@@ -449,69 +453,16 @@ async function restoreSession() {
     saved = [];
   }
 
-  saved = saved.map(c => c === 'ILOVE12C' ? 'ILOVE12CBRO' : c);
-  memberships = [...new Set(saved.filter(x => typeof x === 'string' && x))];
-
-  const valid = [];
-
-  for (const code of memberships) {
-    try {
-      const snap = await getDoc(doc(db, 'groups', code, 'players', uid));
-
-      if (snap.exists()) {
-        valid.push(code);
-      }
-    } catch (err) {
-      console.error('Lig oturumu kontrolü:', code, err);
-    }
-  }
-
-  memberships = valid;
-  localStorage.setItem('fb_leagues', JSON.stringify(memberships));
-  await loadMembershipLeagueNames();
-
-  if (memberships.length) {
-    await switchLeague(memberships[0]);
-  } else {
-    $('entryView').classList.remove('hidden');
-    $('appView').classList.add('hidden');
-  }
-}
-
-      if (snap.exists()) {
-        valid.push(code);
-      }
-    } catch (err) {
-      console.error('Lig oturumu kontrolü:', code, err);
-    }
-  }
-
-  memberships = valid;
-
-  localStorage.setItem(
-    'fb_leagues',
-    JSON.stringify(memberships)
-  );
-
-  await loadMembershipLeagueNames();
-
-  if (memberships.length) {
-    await switchLeague(memberships[0]);
-  } else {
-    $('entryView').classList.remove('hidden');
-    $('appView').classList.add('hidden');
-  }
-  } catch {
-    saved = [];
-  }
-
   // Eski ILOVE12C kalıntılarını yeni ILOVE12CBRO ile değiştir.
   saved = saved.map(c => c === 'ILOVE12C' ? 'ILOVE12CBRO' : c);
-  memberships = [...new Set(saved.filter(x => typeof x === 'string' && x))];
+  const savedCodes = [...new Set(saved.filter(x => typeof x === 'string' && x))];
 
+  // Kayıtlı ligler + bilinen ligler: localStorage silinmiş olsa bile
+  // Firestore'daki oyuncu kaydından kullanıcı yeniden tanınır.
+  const candidates = [...new Set([...savedCodes, ...KNOWN_LEAGUE_CODES])];
   const valid = [];
 
-  for (const code of memberships) {
+  for (const code of candidates) {
     try {
       const snap = await getDoc(doc(db, 'groups', code, 'players', uid));
 
@@ -519,7 +470,12 @@ async function restoreSession() {
         valid.push(code);
       }
     } catch (err) {
+      // Geçici hata (ağ, izin vb.) yüzünden kayıtlı ligi SİLME.
       console.error('Lig oturumu kontrolü:', code, err);
+
+      if (savedCodes.includes(code)) {
+        valid.push(code);
+      }
     }
   }
 
@@ -527,9 +483,19 @@ async function restoreSession() {
   localStorage.setItem('fb_leagues', JSON.stringify(memberships));
   await loadMembershipLeagueNames();
 
-  if (memberships.length) {
-    await switchLeague(memberships[0]);
-  } else {
+  let entered = false;
+
+  for (const code of memberships) {
+    try {
+      await switchLeague(code);
+      entered = true;
+      break;
+    } catch (err) {
+      console.error('Lige girilemedi:', code, err);
+    }
+  }
+
+  if (!entered) {
     $('entryView').classList.remove('hidden');
     $('appView').classList.add('hidden');
   }
