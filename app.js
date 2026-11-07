@@ -440,10 +440,70 @@ async function restoreSession() {
   let saved = [];
 
   try {
-    saved = JSON.parse(localStorage.getItem('fb_leagues') || '[]');
+    const modern = JSON.parse(
+      localStorage.getItem('fb_leagues') || '[]'
+    );
 
-    if (!Array.isArray(saved)) {
-      saved = [];
+    if (Array.isArray(modern)) {
+      saved = modern;
+    }
+
+    // Eski sürümdeki oyuncu oturumunu da kurtar.
+    const legacy = JSON.parse(
+      localStorage.getItem('fb_player') || 'null'
+    );
+
+    if (
+      legacy &&
+      typeof legacy.groupCode === 'string' &&
+      legacy.groupCode.trim()
+    ) {
+      saved.push(legacy.groupCode.trim().toUpperCase());
+    }
+  } catch (err) {
+    console.error('Oturum verisi okunamadı:', err);
+  }
+
+  saved = saved.map(c =>
+    c === 'ILOVE12C' ? 'ILOVE12CBRO' : c
+  );
+
+  memberships = [...new Set(
+    saved.filter(x => typeof x === 'string' && x)
+  )];
+
+  const valid = [];
+
+  for (const code of memberships) {
+    try {
+      const snap = await getDoc(
+        doc(db, 'groups', code, 'players', uid)
+      );
+
+      if (snap.exists()) {
+        valid.push(code);
+      }
+    } catch (err) {
+      console.error('Lig oturumu kontrolü:', code, err);
+    }
+  }
+
+  memberships = valid;
+
+  localStorage.setItem(
+    'fb_leagues',
+    JSON.stringify(memberships)
+  );
+
+  await loadMembershipLeagueNames();
+
+  if (memberships.length) {
+    await switchLeague(memberships[0]);
+  } else {
+    $('entryView').classList.remove('hidden');
+    $('appView').classList.add('hidden');
+  }
+}
     }
   } catch {
     saved = [];
