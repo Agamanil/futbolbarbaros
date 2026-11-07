@@ -1,10 +1,11 @@
+
 // FUTBOLBARBAROS - COKLU LIG + GUNLUK BONUS MAC SISTEMI
 // Firebase Spark (ucretsiz plan) ile calisir. Cloud Functions gerektirmez.
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/13.2.0/firebase-app.js';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/13.2.0/firebase-auth.js';
 import {
   getFirestore, doc, getDoc, setDoc, collection, getDocs,
-  query, orderBy, onSnapshot, updateDoc, serverTimestamp, Timestamp
+  query, orderBy, onSnapshot, updateDoc, deleteDoc, serverTimestamp, Timestamp
 } from 'https://www.gstatic.com/firebasejs/13.2.0/firebase-firestore.js';
 import { firebaseConfig, ADMIN_UID } from './config.js';
 
@@ -24,7 +25,9 @@ let db, uid = null, player = null, groupCode = '';
 let memberships = [], matches = [], players = [], bonusSelections = [], activeMatch = null;
 let leagueCatalog = [];
 let leagueNames = {};
+let avatars = [], userProfiles = {};
 let unsubMatches = null, unsubPlayers = null, unsubBonusSelections = null;
+let unsubAvatars = null, unsubProfiles = null;
 
 const isAdmin = () => Boolean(uid) && uid === ADMIN_UID;
 
@@ -95,6 +98,84 @@ function safe(s) {
     '"': '&quot;',
     "'": '&#39;'
   }[c]));
+}
+
+function avatarFor(userId) {
+  const avatarId = userProfiles[userId]?.avatarId;
+  return avatars.find(item => item.id === avatarId) || null;
+}
+
+function avatarMarkup(userId, className = 'player-avatar') {
+  const avatar = avatarFor(userId);
+  if (avatar?.dataUrl) {
+    return `<img class="${className}" src="${safe(avatar.dataUrl)}" alt="Profil fotoğrafı">`;
+  }
+  return `<span class="${className} avatar-fallback" aria-label="Varsayılan profil fotoğrafı">⚽</span>`;
+}
+
+function renderAvatarUI() {
+  const trigger = $('profileAvatarButton');
+  if (trigger) trigger.innerHTML = avatarMarkup(uid, 'player-avatar');
+
+  const choices = $('avatarChoices');
+  if (choices) {
+    const selectedId = userProfiles[uid]?.avatarId || '';
+    choices.innerHTML = `
+      <button type="button" class="avatar-choice ${!selectedId ? 'selected' : ''}" data-avatar-id="">
+        <span class="player-avatar avatar-fallback">⚽</span><small>Varsayılan</small>
+      </button>
+      ${avatars.map(item => `
+        <button type="button" class="avatar-choice ${selectedId === item.id ? 'selected' : ''}" data-avatar-id="${safe(item.id)}">
+          <img class="player-avatar" src="${safe(item.dataUrl)}" alt="${safe(item.name || 'Profil fotoğrafı')}">
+          <small>${safe(item.name || 'Avatar')}</small>
+        </button>
+      `).join('')}
+    `;
+  }
+
+  const adminList = $('avatarAdminList');
+  if (adminList) {
+    adminList.innerHTML = avatars.length ? avatars.map(item => `
+      <div class="avatar-admin-item">
+        <img class="player-avatar" src="${safe(item.dataUrl)}" alt="${safe(item.name || 'Avatar')}">
+        <span>${safe(item.name || 'Avatar')}</span>
+        <button type="button" class="danger-btn" data-delete-avatar="${safe(item.id)}">Sil</button>
+      </div>
+    `).join('') : '<p class="match-meta">Henüz avatar yüklenmedi.</p>';
+  }
+}
+
+async function compressAvatar(file) {
+  if (!file || !file.type.startsWith('image/')) {
+    throw new Error('Lütfen geçerli bir görsel dosyası seç.');
+  }
+
+  const bitmap = await createImageBitmap(file);
+  const canvas = document.createElement('canvas');
+  const size = 256;
+  canvas.width = size;
+  canvas.height = size;
+  const side = Math.min(bitmap.width, bitmap.height);
+  const sx = (bitmap.width - side) / 2;
+  const sy = (bitmap.height - side) / 2;
+  const context = canvas.getContext('2d');
+  context.drawImage(bitmap, sx, sy, side, side, 0, 0, size, size);
+  bitmap.close?.();
+
+  const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/webp', 0.78));
+  if (!blob) throw new Error('Fotoğraf dönüştürülemedi. Başka bir görsel dene.');
+  if (blob.size > 250 * 1024) {
+    throw new Error('Fotoğraf sıkıştırıldıktan sonra bile çok büyük. Daha küçük bir görsel dene.');
+  }
+
+  const dataUrl = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error('Fotoğraf okunamadı.'));
+    reader.readAsDataURL(blob);
+  });
+
+  return { dataUrl, mimeType: blob.type };
 }
 
 function validName(name) {
@@ -254,6 +335,7 @@ function showApp() {
 
   $('userBadge').textContent = player?.name || 'Oyuncu';
   $('userBadge').classList.remove('hidden');
+  renderAvatarUI();
 
   document.querySelectorAll('.admin-only').forEach(el => {
     el.classList.toggle('hidden', !isAdmin());
@@ -330,6 +412,18 @@ async function boot() {
 
   uid = user.uid;
 
+  unsubAvatars = onSnapshot(collection(db, 'avatars'), snap => {
+    avatars = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderAvatarUI();
+    renderTable();
+  }, err => console.error('Avatar galerisi okunamadı:', err));
+
+  unsubProfiles = onSnapshot(collection(db, 'users'), snap => {
+    userProfiles = Object.fromEntries(snap.docs.map(d => [d.id, d.data()]));
+    renderAvatarUI();
+    renderTable();
+  }, err => console.error('Oyuncu profilleri okunamadı:', err));
+
   if (isAdmin()) {
     try {
       await ensureKnownLeagueDocs();
@@ -396,7 +490,9 @@ $('joinForm').addEventListener('submit', async e => {
   }
 
   const code = $('groupCode').value.trim().toUpperCase();
-  const name = $('playerName').value.trim();  if (!code || !name) return;
+  const name = $('playerName').value.trim();
+
+  if (!code || !name) return;
 
   if (!validName(name)) {
     return message(msg, 'İsim 2-18 karakter arasında olmalı.');
@@ -794,7 +890,8 @@ $('matchForm').addEventListener('submit', async e => {
 
     e.target.reset();
 
-    message(      $('matchFormMessage'),
+    message(
+      $('matchFormMessage'),
       `${groupCode} ligine maç eklendi. Diğer liglere aktarmak için aşağıdaki maç kopyalama menüsünü kullan.`,
       false
     );
@@ -1001,7 +1098,7 @@ function renderTable() {
     ? totals.map((p, i) =>
       `<tr>
         <td>${i + 1}</td>
-        <td>${safe(p.name)}${p.id === uid ? ' (Sen)' : ''}</td>
+        <td><span class="leaderboard-player">${avatarMarkup(p.id, 'player-avatar player-avatar-small')}<span>${safe(p.name)}${p.id === uid ? ' (Sen)' : ''}</span></span></td>
         <td>${p.played}</td>
         <td><b>${p.pts}</b></td>
       </tr>`
@@ -1192,7 +1289,9 @@ function renderBonusPanel() {
       selectBonusMatch(button.dataset.bonusMatch);
     });
   });
-}async function selectBonusMatch(matchId) {
+}
+
+async function selectBonusMatch(matchId) {
   const ctx = getBonusContext();
   const match = matches.find(m => m.id === matchId);
 
@@ -1474,6 +1573,83 @@ if (copySelectedMatchesBtn) {
     }
   });
 }
+
+$('profileAvatarButton')?.addEventListener('click', () => {
+  renderAvatarUI();
+  $('avatarDialog').showModal();
+});
+
+$('avatarChoices')?.addEventListener('click', async e => {
+  const button = e.target.closest('[data-avatar-id]');
+  if (!button || !uid) return;
+
+  const avatarId = button.dataset.avatarId || '';
+  try {
+    await setDoc(doc(db, 'users', uid), {
+      avatarId,
+      updatedAt: serverTimestamp()
+    }, { merge: true });
+    $('avatarDialog').close();
+  } catch (err) {
+    console.error(err);
+    alert('Profil fotoğrafı kaydedilemedi: ' + (err.message || err));
+  }
+});
+
+$('avatarUploadForm')?.addEventListener('submit', async e => {
+  e.preventDefault();
+  if (!isAdmin()) return alert('Yönetici yetkisi yok.');
+
+  const input = $('avatarFiles');
+  const files = [...(input.files || [])];
+  const status = $('avatarUploadMessage');
+  if (!files.length) return message(status, 'Önce fotoğraf seç.');
+
+  const button = $('avatarUploadButton');
+  button.disabled = true;
+  let uploaded = 0;
+  const errors = [];
+
+  for (const file of files) {
+    try {
+      const { dataUrl, mimeType } = await compressAvatar(file);
+      const name = file.name.replace(/\.[^.]+$/, '').slice(0, 40) || 'Avatar';
+      const ref = doc(collection(db, 'avatars'));
+      await setDoc(ref, {
+        name,
+        dataUrl,
+        mimeType,
+        createdAt: serverTimestamp(),
+        createdBy: uid
+      });
+      uploaded++;
+    } catch (err) {
+      console.error(err);
+      errors.push(`${file.name}: ${err.message || err}`);
+    }
+  }
+
+  input.value = '';
+  button.disabled = false;
+  message(status, `Yüklenen: ${uploaded}${errors.length ? ` · Hatalı: ${errors.join(' | ')}` : ''}`, errors.length > 0);
+});
+
+$('avatarAdminList')?.addEventListener('click', async e => {
+  const button = e.target.closest('[data-delete-avatar]');
+  if (!button || !isAdmin()) return;
+  const avatarId = button.dataset.deleteAvatar;
+  const avatar = avatars.find(item => item.id === avatarId);
+  if (!avatar || !confirm(`“${avatar.name || 'Avatar'}” fotoğrafı silinsin mi?`)) return;
+
+  try {
+    await deleteDoc(doc(db, 'avatars', avatarId));
+  } catch (err) {
+    console.error(err);
+    alert('Fotoğraf silinemedi: ' + (err.message || err));
+  }
+});
+
+$('closeAvatarDialog')?.addEventListener('click', () => $('avatarDialog').close());
 
 $('editNameButton').addEventListener('click', () => {
   if (!player) return;

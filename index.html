@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="tr">
 <head>
@@ -73,6 +74,22 @@
       .season-select-btn { width: 100%; }
       .copy-tools-grid { grid-template-columns: 1fr; }
     }
+
+    /* Profil fotoğrafları */
+    .profile-avatar-trigger { border: 0; padding: 0; background: transparent; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+    .player-avatar { width: 44px; height: 44px; border-radius: 50%; object-fit: cover; border: 2px solid var(--green, #b7f36b); background: #173b28; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; }
+    .player-avatar-small { width: 30px; height: 30px; border-width: 1px; }
+    .avatar-fallback { color: #d8f5c2; font-size: 22px; }
+    .leaderboard-player { display: inline-flex; align-items: center; gap: 9px; min-width: 0; }
+    .avatar-gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(95px, 1fr)); gap: 10px; margin-top: 12px; }
+    .avatar-choice { display: flex; flex-direction: column; align-items: center; gap: 7px; padding: 10px 6px; border: 1px solid #ffffff24; border-radius: 12px; background: #071e14aa; color: inherit; cursor: pointer; min-width: 0; }
+    .avatar-choice.selected { border: 2px solid var(--green, #b7f36b); background: #1c3c27; }
+    .avatar-choice small { max-width: 100%; overflow-wrap: anywhere; font-size: 10px; }
+    .avatar-admin-item { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid #ffffff18; }
+    .avatar-admin-item span { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: 12px; }
+    .avatar-upload-grid { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: end; }
+    .avatar-upload-grid input { width: 100%; }
+    @media (max-width: 620px) { .avatar-upload-grid { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
@@ -102,6 +119,7 @@
         </div>
       </div>
       <div class="header-right">
+        <button type="button" id="profileAvatarButton" class="profile-avatar-trigger" title="Profil fotoğrafını değiştir" aria-label="Profil fotoğrafını değiştir"><span class="player-avatar avatar-fallback">⚽</span></button>
         <span id="userBadge" class="badge hidden"></span>
         <button id="editNameButton" class="small-btn">İsim Değiştir</button>
         <button id="leaveButton" class="danger-btn">Oturumu Sıfırla</button>
@@ -203,6 +221,8 @@
 
               <!-- Kafa -->
               <circle cx="110" cy="83" r="27" fill="#f4f0df" stroke="#1b281f" stroke-width="4"/>
+              <defs><clipPath id="winnerHeadClip"><circle cx="110" cy="83" r="25"/></clipPath></defs>
+              <image id="winnerHeadImage" x="85" y="58" width="50" height="50" preserveAspectRatio="xMidYMid slice" clip-path="url(#winnerHeadClip)" href="" style="display:none"/>
               <text id="winnerHeadText" x="110" y="88" text-anchor="middle" dominant-baseline="middle" font-size="13" font-weight="900" fill="#142319">?</text>
 
               <!-- Kral tacı -->
@@ -216,7 +236,8 @@
             <div class="honor-subtitle">Kral tahtının sahibi</div>
           </article>
 
-          <article class="honor-card last">            <svg class="honor-figure" viewBox="0 0 220 220" role="img" aria-label="Yerde üzgün oturan stickman">
+          <article class="honor-card last">
+            <svg class="honor-figure" viewBox="0 0 220 220" role="img" aria-label="Yerde üzgün oturan stickman">
               <!-- Zemin -->
               <path d="M26 190 H194" stroke="#829188" stroke-width="4" stroke-linecap="round"/>
 
@@ -230,6 +251,8 @@
               </g>
 
               <circle cx="111" cy="82" r="27" fill="#e7ece8" stroke="#252e29" stroke-width="4"/>
+              <defs><clipPath id="lastHeadClip"><circle cx="111" cy="82" r="25"/></clipPath></defs>
+              <image id="lastHeadImage" x="86" y="57" width="50" height="50" preserveAspectRatio="xMidYMid slice" clip-path="url(#lastHeadClip)" href="" style="display:none"/>
               <text id="lastHeadText" x="111" y="87" text-anchor="middle" dominant-baseline="middle" font-size="13" font-weight="900" fill="#18221c">?</text>
 
               <!-- Perişanlık çizgileri -->
@@ -277,6 +300,21 @@
     <main id="adminTab" class="tab-content admin-only hidden">
       <div class="section-header">
         <h3>Yönetici Paneli</h3>
+      </div>
+
+      <div class="card admin-card">
+        <h4>Profil Fotoğrafı Galerisi</h4>
+        <p class="match-meta">Buraya yüklediğin fotoğraflar tüm oyuncuların seçim galerisine eklenir. Görseller otomatik olarak 256×256 boyutuna küçültülür.</p>
+        <form id="avatarUploadForm">
+          <div class="avatar-upload-grid">
+            <label>Fotoğrafları seç<input id="avatarFiles" type="file" accept="image/*" multiple required></label>
+            <button id="avatarUploadButton" class="primary-btn" type="submit">Fotoğrafları yükle</button>
+          </div>
+        </form>
+        <div id="avatarUploadMessage" class="message" aria-live="polite"></div>
+        <hr class="season-divider">
+        <h4>Yüklenen fotoğraflar</h4>
+        <div id="avatarAdminList"></div>
       </div>
 
       <div class="card admin-card">
@@ -355,6 +393,18 @@
       <div id="adminMatches" class="matches-grid"></div>
     </main>
   </div>
+
+  <!-- Profil fotoğrafı seçme penceresi -->
+  <dialog id="avatarDialog" class="modal">
+    <div class="card modal-card">
+      <h3>Profil Fotoğrafını Seç</h3>
+      <p class="match-meta">Galeriden bir fotoğraf seç. Seçimin bütün liglerinde geçerli olacak.</p>
+      <div id="avatarChoices" class="avatar-gallery"></div>
+      <div class="modal-actions">
+        <button type="button" class="secondary-btn" id="closeAvatarDialog">Kapat</button>
+      </div>
+    </div>
+  </dialog>
 
   <!-- Tahmin Yapma Dialog Penceresi -->
   <dialog id="predictionDialog" class="modal">
