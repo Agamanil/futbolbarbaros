@@ -504,7 +504,6 @@ async function restoreSession() {
     $('appView').classList.add('hidden');
   }
 }
-    }
   } catch {
     saved = [];
   }
