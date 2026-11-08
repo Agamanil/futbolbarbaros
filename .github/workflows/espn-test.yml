@@ -18,28 +18,11 @@ jobs:
             -w "HTTP STATUS: %{http_code}\n" \
             "https://site.api.espn.com/apis/site/v2/sports/soccer/eng.1/scoreboard"
 
-          echo "Gelen mac verileri:"
+          echo "LIG:"
+          jq -r '.leagues[0].name' response.json
 
-          python - <<'PY'
-          import json
+          echo "EVENT SAYISI:"
+          jq '.events | length' response.json
 
-          with open("response.json", encoding="utf-8") as f:
-              data = json.load(f)
-
-          leagues = data.get("leagues", [])
-          events = data.get("events", [])
-
-          if leagues:
-              print("LIG:", leagues[0].get("name"))
-
-          print("EVENT SAYISI:", len(events))
-
-          for event in events:
-              print(
-                  event.get("name"),
-                  "|",
-                  event.get("date"),
-                  "|",
-                  event.get("status", {}).get("type", {}).get("description")
-              )
-          PY
+          echo "MACLAR:"
+          jq -r '.events[]? | "\(.name) | \(.date) | \(.status.type.description)"' response.json
