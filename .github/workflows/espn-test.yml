@@ -1,0 +1,20 @@
+
+name: ESPN Connection Test
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Test ESPN
+        run: |
+          echo "ESPN baglantisi test ediliyor..."
+          curl -L -sS \
+            -o response.json \
+            -w "HTTP STATUS: %{http_code}\n" \
+            "https://site.api.espn.com/apis/site/v2/sports/soccer/eng.1/scoreboard"
+
+          echo "Gelen veri:"
+          head -c 1500 response.json
