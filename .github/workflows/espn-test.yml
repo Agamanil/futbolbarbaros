@@ -1,69 +1,44 @@
 
-name: ESPN Fixture Reliability Test
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <title>ESPN Bağlantı Testi</title>
+</head>
+<body>
+  <h2>ESPN Veri Testi</h2>
+  <button onclick="testESPN()">Premier League Test Et</button>
+  <pre id="result">Henüz test yapılmadı.</pre>
 
-on:
-  workflow_dispatch:
+  <script>
+    async function testESPN() {
+      const result = document.getElementById("result");
+      result.textContent = "Bağlantı deneniyor...";
 
-jobs:
-  test:
-    runs-on: ubuntu-latest
+      try {
+        const response = await fetch(
+          "https://site.api.espn.com/apis/site/v2/sports/soccer/eng.1/scoreboard"
+        );
 
-    steps:
-      - name: Test Daily Fixtures
-        run: |
-          echo "ESPN GUNLUK FIKSTUR TESTI"
+        if (!response.ok) {
+          throw new Error("HTTP " + response.status);
+        }
 
-          START=$(date -u +%Y%m%d)
+        const data = await response.json();
 
-          competitions=(
-            "tur.1|Türkiye Süper Lig"
-            "eng.1|Premier League"
-            "esp.1|La Liga"
-            "ger.1|Bundesliga"
-            "ita.1|Serie A"
-            "uefa.champions|Şampiyonlar Ligi"
-            "uefa.europa|Avrupa Ligi"
-            "uefa.europa.conf|Konferans Ligi"
-            "uefa.nations|UEFA Uluslar Ligi"
-          )
-
-          for item in "${competitions[@]}"; do
-            code="${item%%|*}"
-            name="${item#*|}"
-
-            echo ""
-            echo "################################"
-            echo "LIG: $name"
-            echo "################################"
-
-            for day in {0..7}; do
-              DATE=$(date -u -d "$START + $day days" +%Y%m%d)
-
-              echo ""
-              echo "TARIH: $DATE"
-
-              status=$(curl --compressed -L -sS \
-                -o response.json \
-                -w "%{http_code}" \
-                "https://site.api.espn.com/apis/site/v2/sports/soccer/$code/scoreboard?dates=$DATE")
-
-              echo "HTTP: $status"
-
-              if [ "$status" != "200" ]; then
-                echo "HATA:"
-                cat response.json
-                continue
-              fi
-
-              echo "MAC SAYISI:"
-              jq '(.events // []) | length' response.json
-
-              jq -r '
-                .events[]? |
-                "\(.id) | \(.name) | \(.date) | \(.status.type.description)"
-              ' response.json
-            done
-          done
-
-          echo ""
-          echo "TEST TAMAMLANDI"
+        result.textContent = JSON.stringify(
+          data.events?.map(match => ({
+            mac: match.name,
+            tarih: match.date,
+            durum: match.status?.type?.description
+          })) ?? data,
+          null,
+          2
+        );
+      } catch (error) {
+        result.textContent = "TEST BAŞARISIZ: " + error.message;
+      }
+    }
+  </script>
+</body>
+</html>
