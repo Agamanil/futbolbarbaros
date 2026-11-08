@@ -12,7 +12,7 @@ const $ = id => document.getElementById(id);
 const hasConfig = Boolean(firebaseConfig?.apiKey && firebaseConfig?.projectId);
 const TIME_ZONE = 'Europe/Istanbul';
 // Cloudflare Worker URL will be inserted after deploying worker.js.
-const ESPN_LOOKUP_ENDPOINT = 'PASTE_CLOUDFLARE_WORKER_URL_HERE';
+const ESPN_LOOKUP_ENDPOINT = 'const ESPN_LOOKUP_ENDPOINT = 'https://withered-flower-d39e.anileris215.workers.dev';';
 
 const KNOWN_LEAGUES = [
   { code: 'BARBAROS26', label: 'BARBAROS26' },
