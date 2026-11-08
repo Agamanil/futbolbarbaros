@@ -1,7 +1,7 @@
 // FUTBOLBARBAROS - COKLU LIG + GUNLUK BONUS MAC SISTEMI
 // Firebase Spark (ucretsiz plan) ile calisir. Cloud Functions gerektirmez.
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/13.2.0/firebase-app.js';
-import { getAuth, signInAnonymously, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/13.2.0/firebase-auth.js';
+import { getAuth, signInAnonymously, onAuthStateChanged, setPersistence, browserLocalPersistence } from 'https://www.gstatic.com/firebasejs/13.2.0/firebase-auth.js';
 import {
   getFirestore, doc, getDoc, setDoc, collection, getDocs,
   query, orderBy, onSnapshot, updateDoc, deleteDoc, serverTimestamp, Timestamp
@@ -392,29 +392,49 @@ async function boot() {
 
   const app = initializeApp(firebaseConfig);
   const auth = getAuth(app);
+
+  // Anonim Firebase kimliğini bu tarayıcıda kalıcı tut.
+  try {
+    await setPersistence(auth, browserLocalPersistence);
+  } catch (err) {
+    // Gizli mod veya tarayıcı depolama kısıtında mevcut oturumla devam et.
+    console.warn('Firebase oturum kalıcılığı ayarlanamadı:', err);
+  }
+
   db = getFirestore(app);
 
-  // Kayıtlı anonim oturumun tarayıcıdan geri yüklenmesini bekle;
-  // sadece gerçekten oturum yoksa yeni anonim giriş yap.
+  // Firebase'in mevcut anonim oturumunu geri yükle; yalnızca kullanıcı yoksa yenisini oluştur.
   const user = await new Promise((resolve, reject) => {
     let signingIn = false;
+    let settled = false;
     let unsubscribe = () => {};
 
-    unsubscribe = onAuthStateChanged(auth, u => {
-      if (u) {
-        unsubscribe();
-        resolve(u);
+    const finish = (callback, value) => {
+      if (settled) return;
+      settled = true;
+      unsubscribe();
+      callback(value);
+    };
+
+    unsubscribe = onAuthStateChanged(auth, async currentUser => {
+      if (currentUser) {
+        finish(resolve, currentUser);
         return;
       }
-
-      if (!signingIn) {
-        signingIn = true;
-        signInAnonymously(auth).catch(reject);
+      if (signingIn) return;
+      signingIn = true;
+      try {
+        const credential = await signInAnonymously(auth);
+        finish(resolve, credential.user);
+      } catch (err) {
+        finish(reject, err);
       }
-    }, reject);
+    }, err => finish(reject, err));
   });
 
   uid = user.uid;
+  console.info('FUTBOLBARBAROS Firebase UID:', uid);
+  console.info('FUTBOLBARBAROS yönetici hesabı:', isAdmin() ? 'EVET' : 'HAYIR');
 
   unsubAvatars = onSnapshot(collection(db, 'avatars'), snap => {
     avatars = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -498,6 +518,13 @@ async function restoreSession() {
   if (!entered) {
     $('entryView').classList.remove('hidden');
     $('appView').classList.add('hidden');
+
+    if (savedCodes.length) {
+      message(
+        $('entryMessage'),
+        'Kayıtlı liglerin var ancak bu tarayıcıdaki Firebase oturumu oyuncu kaydınla eşleşmedi. Anonim oturum veya tarayıcı verileri sıfırlanmış olabilir. Konsoldaki FUTBOLBARBAROS Firebase UID bilgisini kontrol et.'
+      );
+    }
   }
 }
 
@@ -879,7 +906,7 @@ $('matchForm').addEventListener('submit', async e => {
   }
 
   if (espnId && !/^\d{5,20}$/.test(espnId)) {
-    return message($('matchFormMessage'), 'ESPN maç ID'si yalnızca rakamlardan oluşmalı.');
+    return message($('matchFormMessage'), 'ESPN maç ID\'si yalnızca rakamlardan oluşmalı.');
   }
 
   if (!kickoff || !predictionOpenAt || !predictionCloseAt) {
@@ -1021,18 +1048,15 @@ function renderAdminMatches() {
   el.querySelectorAll('[data-save-espn]').forEach(button => {
     button.addEventListener('click', async () => {
       if (!isAdmin()) return alert('Yönetici yetkisi yok.');
-
       const id = button.dataset.saveEspn;
       const espnId = $(`espn-${id}`)?.value.trim() || '';
-
       if (espnId && !/^\d{5,20}$/.test(espnId)) {
-        return alert('ESPN maç ID'si yalnızca rakamlardan oluşmalı.');
+        return alert('ESPN maç ID\'si yalnızca rakamlardan oluşmalı.');
       }
-
       button.disabled = true;
       try {
         await updateDoc(doc(db, 'groups', groupCode, 'matches', id), { espnId });
-        alert(espnId ? 'ESPN maç ID'si kaydedildi.' : 'ESPN maç bağlantısı kaldırıldı.');
+        alert(espnId ? 'ESPN maç ID\'si kaydedildi.' : 'ESPN maç bağlantısı kaldırıldı.');
       } catch (err) {
         console.error(err);
         alert('ESPN ID kaydedilemedi: ' + err.message);
