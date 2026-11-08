@@ -1,44 +1,65 @@
 
-<!DOCTYPE html>
-<html lang="tr">
-<head>
-  <meta charset="UTF-8">
-  <title>ESPN Bağlantı Testi</title>
-</head>
-<body>
-  <h2>ESPN Veri Testi</h2>
-  <button onclick="testESPN()">Premier League Test Et</button>
-  <pre id="result">Henüz test yapılmadı.</pre>
+name: ESPN Connection Test
 
-  <script>
-    async function testESPN() {
-      const result = document.getElementById("result");
-      result.textContent = "Bağlantı deneniyor...";
+on:
+  workflow_dispatch:
 
-      try {
-        const response = await fetch(
-          "https://site.api.espn.com/apis/site/v2/sports/soccer/eng.1/scoreboard"
-        );
+permissions:
+  contents: read
 
-        if (!response.ok) {
-          throw new Error("HTTP " + response.status);
-        }
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
 
-        const data = await response.json();
+    steps:
+      - name: Node.js kur
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
 
-        result.textContent = JSON.stringify(
-          data.events?.map(match => ({
-            mac: match.name,
-            tarih: match.date,
-            durum: match.status?.type?.description
-          })) ?? data,
-          null,
-          2
-        );
-      } catch (error) {
-        result.textContent = "TEST BAŞARISIZ: " + error.message;
-      }
-    }
-  </script>
-</body>
-</html>
+      - name: ESPN Liglerini Test Et
+        shell: bash
+        run: |
+          set -e
+
+          leagues=(
+            "tur.1"
+            "eng.1"
+            "esp.1"
+            "ger.1"
+            "ita.1"
+            "uefa.champions"
+            "uefa.europa"
+            "uefa.europa.conf"
+            "uefa.nations"
+          )
+
+          for league in "${leagues[@]}"; do
+            echo ""
+            echo "=============================="
+            echo "LIG: $league"
+            echo "=============================="
+
+            url="https://site.api.espn.com/apis/site/v2/sports/soccer/$league/scoreboard"
+
+            curl --compressed -L -sS \
+              -o response.json \
+              -w "HTTP: %{http_code}\n" \
+              "$url"
+
+            if ! jq -e '.events' response.json >/dev/null; then
+              echo "ESPN VERISI OKUNAMADI"
+              cat response.json
+              continue
+            fi
+
+            echo "MAC SAYISI:"
+            jq '.events | length' response.json
+
+            jq -r '.events[]? |
+              "\(.id) | \(.name) | \(.date) | \(.status.type.description)"' response.json
+          done
+
+          echo ""
+          echo "ESPN TESTI TAMAMLANDI"
