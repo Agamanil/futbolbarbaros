@@ -420,24 +420,13 @@
         <h4>Seçili Lige Yeni Maç Ekle</h4>
         <p class="match-meta">Bir maçın sezon puan tablosuna girmesi için maç başlangıç tarihi, ilgili sezonun başlangıç ve bitiş tarihleri arasında olmalı.</p>
         <form id="matchForm">
-          <div class="two-col">
-            <label>Ev Sahibi<input type="text" id="homeTeam" required></label>
-            <label>Deplasman<input type="text" id="awayTeam" required></label>
-          </div>
-
-          <div class="two-col">
-            <label>Organizasyon<input type="text" id="competition" placeholder="Örn: Süper Lig"></label>
-            <label>Maç Başlangıcı<input type="datetime-local" id="kickoff" required></label>
-          </div>
-
-          <div class="two-col">
-            <label>Tahmin Açılış<input type="datetime-local" id="predictionOpenAt" required></label>
-            <label>Tahmin Kapanış<input type="datetime-local" id="predictionCloseAt" required></label>
-          </div>
-
-          <label>ESPN maç ID'si (isteğe bağlı)<input type="text" id="newMatchEspnId" placeholder="Örn: 401861145" inputmode="numeric" autocomplete="off"></label>
-          <p class="match-meta">ESPN ID girersen maç daha sonra canlı skor güncellemesine bağlanabilir. Boş bırakabilirsin.</p>
-          <button type="submit" class="primary-btn">Seçili Lige Maçı Ekle</button>
+          <label>ESPN maç ID'si
+            <input type="text" id="newMatchEspnId" placeholder="Örn: 401861170" inputmode="numeric" autocomplete="off" required>
+          </label>
+          <button type="button" id="lookupEspnMatchBtn" class="secondary-btn">ESPN'den Maç Bilgilerini Getir</button>
+          <div id="espnMatchPreview" class="match-meta" style="display:none;margin-top:12px;padding:12px;border:1px solid var(--border,rgba(255,255,255,.12));border-radius:10px;"></div>
+          <p class="match-meta">Maç bilgileri ESPN'den alınır. Maçı eklediğin andan 5 dakika sonra tahmin açılır; maçtan 1 saat önce kapanır.</p>
+          <button type="submit" id="createEspnMatchBtn" class="primary-btn" disabled>Seçili Lige Maçı Ekle</button>
         </form>
         <div id="matchFormMessage" class="message"></div>
       </div>

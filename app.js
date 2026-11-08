@@ -11,6 +11,8 @@ import { firebaseConfig, ADMIN_UID } from './config.js';
 const $ = id => document.getElementById(id);
 const hasConfig = Boolean(firebaseConfig?.apiKey && firebaseConfig?.projectId);
 const TIME_ZONE = 'Europe/Istanbul';
+// Cloudflare Worker URL will be inserted after deploying worker.js.
+const ESPN_LOOKUP_ENDPOINT = 'PASTE_CLOUDFLARE_WORKER_URL_HERE';
 
 const KNOWN_LEAGUES = [
   { code: 'BARBAROS26', label: 'BARBAROS26' },
@@ -899,75 +901,72 @@ $('predictionForm').addEventListener('submit', async e => {
   }
 });
 
-/* Yeni maç yalnızca aktif olan lige eklenir. */
+/* ESPN ID ile otomatik maç bilgisi çek ve tek adımda kaydet. */
+let fetchedEspnMatch = null;
+
+$('lookupEspnMatchBtn')?.addEventListener('click', async () => {
+  if (!isAdmin()) return message($('matchFormMessage'), 'Yönetici yetkisi yok.');
+  const espnId = $('newMatchEspnId').value.trim();
+  if (!/^\d{5,20}$/.test(espnId)) return message($('matchFormMessage'), 'Geçerli bir ESPN maç ID'si gir.');
+  if (!ESPN_LOOKUP_ENDPOINT.startsWith('https://')) return message($('matchFormMessage'), 'Önce Cloudflare Worker adresini app.js içindeki ESPN_LOOKUP_ENDPOINT alanına eklemeliyiz.');
+  const button = $('lookupEspnMatchBtn');
+  button.disabled = true;
+  message($('matchFormMessage'), 'ESPN maç bilgileri alınıyor...', false);
+  try {
+    const response = await fetch(`${ESPN_LOOKUP_ENDPOINT}?event=${encodeURIComponent(espnId)}`);
+    const data = await response.json();
+    if (!response.ok || !data.ok) throw new Error(data.error || 'ESPN maç bilgisi bulunamadı.');
+    fetchedEspnMatch = data.match;
+    $('espnMatchPreview').innerHTML = `<b>${safe(data.match.homeTeam)} - ${safe(data.match.awayTeam)}</b><br>${safe(data.match.competition)}<br>${safe(dateText(data.match.kickoff))}`;
+    $('espnMatchPreview').style.display = 'block';
+    $('createEspnMatchBtn').disabled = false;
+    message($('matchFormMessage'), 'Maç bulundu. Bilgileri kontrol edip Maçı Ekle butonuna bas.', false);
+  } catch (err) {
+    fetchedEspnMatch = null;
+    $('espnMatchPreview').style.display = 'none';
+    $('createEspnMatchBtn').disabled = true;
+    message($('matchFormMessage'), 'Maç bilgisi alınamadı: ' + err.message);
+  } finally {
+    button.disabled = false;
+  }
+});
+
 $('matchForm').addEventListener('submit', async e => {
   e.preventDefault();
-
-  if (!isAdmin()) {
-    return alert('Yönetici yetkisi yok.');
+  if (!isAdmin()) return message($('matchFormMessage'), 'Yönetici yetkisi yok.');
+  if (!fetchedEspnMatch || fetchedEspnMatch.espnId !== $('newMatchEspnId').value.trim()) {
+    return message($('matchFormMessage'), 'Önce ESPN ID ile maç bilgilerini getir.');
   }
-
-  const kickoff = fromLocalInput($('kickoff').value);
-  const predictionOpenAt = fromLocalInput($('predictionOpenAt').value);
-  const predictionCloseAt = fromLocalInput($('predictionCloseAt').value);
-
-  const homeTeam = $('homeTeam').value.trim();
-  const awayTeam = $('awayTeam').value.trim();
-  const competition = $('competition').value.trim() || 'Futbol';
-  const espnId = $('newMatchEspnId')?.value.trim() || '';
-
-  if (!homeTeam || !awayTeam) {
-    return message($('matchFormMessage'), 'İki takımın adını da gir.');
-  }
-
-  if (espnId && !/^\d{5,20}$/.test(espnId)) {
-    return message($('matchFormMessage'), 'ESPN maç ID\'si yalnızca rakamlardan oluşmalı.');
-  }
-
-  if (!kickoff || !predictionOpenAt || !predictionCloseAt) {
-    return message($('matchFormMessage'), 'Bütün tarih alanlarını doldur.');
-  }
-
-  if (kickoff <= new Date()) {
-    return message($('matchFormMessage'), 'Maç tarihi gelecekte olmalı.');
-  }
-
-  if (predictionCloseAt <= predictionOpenAt) {
-    return message($('matchFormMessage'), 'Tahmin kapanışı açılıştan sonra olmalı.');
-  }
-
-  if (predictionCloseAt > kickoff) {
-    return message($('matchFormMessage'), 'Tahmin kapanışı maç başlangıcından sonra olamaz.');
-  }
-
+  const kickoff = new Date(fetchedEspnMatch.kickoff);
+  const predictionOpenAt = new Date(Date.now() + 5 * 60 * 1000);
+  const predictionCloseAt = new Date(kickoff.getTime() - 60 * 60 * 1000);
+  if (!Number.isFinite(kickoff.getTime()) || kickoff <= new Date()) return message($('matchFormMessage'), 'Bu maçın başlangıç zamanı geçersiz veya maç başlamış.');
+  if (predictionCloseAt <= predictionOpenAt) return message($('matchFormMessage'), 'Tahmin kapanışına 5 dakikadan az kalmış. Bu maç için tahmin açılamaz.');
   try {
+    $('createEspnMatchBtn').disabled = true;
     const matchRef = doc(collection(db, 'groups', groupCode, 'matches'));
-
-    const matchData = {
-      homeTeam,
-      awayTeam,
-      competition,
-      espnId,
+    await setDoc(matchRef, {
+      homeTeam: fetchedEspnMatch.homeTeam,
+      awayTeam: fetchedEspnMatch.awayTeam,
+      competition: fetchedEspnMatch.competition,
+      espnId: fetchedEspnMatch.espnId,
+      espnLeagueCode: fetchedEspnMatch.leagueCode || '',
       kickoff: Timestamp.fromDate(kickoff),
       predictionOpenAt: Timestamp.fromDate(predictionOpenAt),
       predictionCloseAt: Timestamp.fromDate(predictionCloseAt),
       createdAt: serverTimestamp(),
       createdBy: uid,
       predictions: {}
-    };
-
-    await setDoc(matchRef, matchData);
-
+    });
     e.target.reset();
-
-    message(
-      $('matchFormMessage'),
-      `${groupCode} ligine maç eklendi. Diğer liglere aktarmak için aşağıdaki maç kopyalama menüsünü kullan.`,
-      false
-    );
+    fetchedEspnMatch = null;
+    $('espnMatchPreview').style.display = 'none';
+    message($('matchFormMessage'), `${groupCode} ligine maç eklendi. Tahminler 5 dakika sonra açılacak.`, false);
   } catch (err) {
     console.error(err);
     message($('matchFormMessage'), 'Maç eklenemedi: ' + err.message);
+  } finally {
+    $('createEspnMatchBtn').disabled = true;
   }
 });
 
