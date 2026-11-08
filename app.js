@@ -185,6 +185,20 @@ function hasResult(m) {
   return m.homeScore !== undefined && m.awayScore !== undefined;
 }
 
+function liveScoreMarkup(m) {
+  if (hasResult(m)) {
+    return `<div class="match-meta" style="margin-top:5px;color:#22c55e;font-weight:800;">BİTTİ · ${safe(m.homeScore)} - ${safe(m.awayScore)}</div>`;
+  }
+  if (m.espnState === 'in' && m.liveHomeScore !== undefined && m.liveAwayScore !== undefined) {
+    const detail = m.espnStatus ? ` · ${safe(m.espnStatus)}` : '';
+    return `<div class="match-meta" style="margin-top:5px;color:#ef4444;font-weight:800;">● CANLI · ${safe(m.liveHomeScore)} - ${safe(m.liveAwayScore)}${detail}</div>`;
+  }
+  if (m.espnState === 'pre') {
+    return `<div class="match-meta" style="margin-top:5px;color:#94a3b8;">BAŞLAMADI</div>`;
+  }
+  return '';
+}
+
 function predictionFor(m) {
   return m.predictions?.[uid];
 }
@@ -798,6 +812,7 @@ function renderMatches() {
         <div class="match-meta">${safe(m.competition || 'FUTBOL')} · ${dateText(m.kickoff)} ${bonusIds.has(m.id) ? '<span style="display:inline-block;margin-left:6px;padding:3px 7px;border-radius:5px;background:rgba(245,158,11,.18);color:#fbbf24;font-weight:800;">⭐ BONUS 2X</span>' : ''}</div>
         <div class="teams"><span>${safe(m.homeTeam)}</span><span class="vs">VS</span><span>${safe(m.awayTeam)}</span></div>
         <div class="match-meta">${safe(predictionStatus(m))}</div>
+        ${liveScoreMarkup(m)}
       </div>
       <div class="match-actions">
         <div class="prediction-label">
@@ -976,6 +991,7 @@ function renderAdminMatches() {
       <div class="match-meta">${dateText(m.kickoff)} ${bonusIds.has(m.id) ? '<span style="color:#fbbf24;font-weight:800;">⭐ BONUS 2X</span>' : ''}</div>
       <div class="teams"><span>${safe(m.homeTeam)}</span><span class="vs">VS</span><span>${safe(m.awayTeam)}</span></div>
       <div class="match-meta">${safe(predictionStatus(m))}</div>
+      ${liveScoreMarkup(m)}
     </div>
     <div class="admin-match-settings">
       <label>Tahmin açılışı<input type="datetime-local" id="open-${safe(m.id)}" value="${safe(toLocalInput(m.predictionOpenAt))}"></label>
