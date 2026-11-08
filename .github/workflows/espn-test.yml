@@ -17,4 +17,4 @@ jobs:
             "https://site.api.espn.com/apis/site/v2/sports/soccer/eng.1/scoreboard"
 
           echo "Gelen veri:"
-          head -c 1500 response.json
+python -c "import json; d=json.load(open('response.json')); print('LIG:', d.get('leagues',[{}])[0].get('name')); print('EVENT SAYISI:', len(d.get('events',[]))); [print(x.get('name'), '|', x.get('date')) for x in d.get('events',[])]"
