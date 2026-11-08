@@ -907,7 +907,7 @@ let fetchedEspnMatch = null;
 $('lookupEspnMatchBtn')?.addEventListener('click', async () => {
   if (!isAdmin()) return message($('matchFormMessage'), 'Yönetici yetkisi yok.');
   const espnId = $('newMatchEspnId').value.trim();
-  if (!/^\d{5,20}$/.test(espnId)) return message($('matchFormMessage'), 'Geçerli bir ESPN maç ID'si gir.');
+  if (!/^\d{5,20}$/.test(espnId)) return message($('matchFormMessage'), "Geçerli bir ESPN maç ID'si gir.");
   if (!ESPN_LOOKUP_ENDPOINT.startsWith('https://')) return message($('matchFormMessage'), 'Önce Cloudflare Worker adresini app.js içindeki ESPN_LOOKUP_ENDPOINT alanına eklemeliyiz.');
   const button = $('lookupEspnMatchBtn');
   button.disabled = true;
