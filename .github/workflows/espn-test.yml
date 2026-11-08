@@ -1,5 +1,5 @@
 
-name: ESPN Competition Coverage Test
+name: ESPN Fixture Reliability Test
 
 on:
   workflow_dispatch:
@@ -9,9 +9,14 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Test ESPN Competitions
+      - name: Test Fixture Range and Match IDs
         run: |
-          echo "ESPN LIG TESTLERI BASLIYOR"
+          echo "ESPN 7 GUNLUK FIKSTUR TESTI"
+
+          START=$(date -u +%Y%m%d)
+          END=$(date -u -d "+7 days" +%Y%m%d)
+
+          echo "TARIH ARALIGI: $START - $END"
 
           competitions=(
             "tur.1|Türkiye Süper Lig"
@@ -32,36 +37,45 @@ jobs:
             echo ""
             echo "================================"
             echo "LIG: $name"
-            echo "KOD: $code"
             echo "================================"
 
-            status=$(curl -L -sS \
-              -o response.json \
-              -w "%{http_code}" \
-              "https://site.api.espn.com/apis/site/v2/sports/soccer/$code/scoreboard")
+            URL="https://site.api.espn.com/apis/site/v2/sports/soccer/$code/scoreboard?dates=$START-$END"
 
-            echo "HTTP STATUS: $status"
+            curl -L -sS -o response1.json -w "ILK HTTP: %{http_code}\n" "$URL"
+            curl -L -sS -o response2.json -w "IKINCI HTTP: %{http_code}\n" "$URL"
 
-            if [ "$status" != "200" ]; then
-              echo "BAGLANTI BASARISIZ"
-              echo "ESPN HATA CEVABI:"
-              cat response.json
+            if ! jq -e '.events | type == "array"' response1.json >/dev/null 2>&1; then
+              echo "GECERSIZ ILK CEVAP"
+              cat response1.json
               continue
             fi
 
-            echo "ESPN LIG ADI:"
-            jq -r '.leagues[0].name // "LIG BILGISI YOK"' response.json
+            if ! jq -e '.events | type == "array"' response2.json >/dev/null 2>&1; then
+              echo "GECERSIZ IKINCI CEVAP"
+              cat response2.json
+              continue
+            fi
+
+            jq -r '[.events[].id] | sort[]' response1.json > ids1.txt
+            jq -r '[.events[].id] | sort[]' response2.json > ids2.txt
 
             echo "MAC SAYISI:"
-            jq '(.events // []) | length' response.json
+            jq '.events | length' response1.json
 
             echo "MACLAR:"
             jq -r '
-              (.events // [])[:10][] |
-              "\(.name) | \(.date) | \(.status.type.description)"
-            ' response.json
+              .events[] |
+              "\(.id) | \(.name) | \(.date) | \(.status.type.description)"
+            ' response1.json
 
+            echo "MAC ID KONTROLU:"
+
+            if diff -u ids1.txt ids2.txt; then
+              echo "BASARILI: MAC ID'LERI AYNI"
+            else
+              echo "UYARI: MAC ID LISTESI DEGISTI"
+            fi
           done
 
           echo ""
-          echo "BUTUN LIG TESTLERI TAMAMLANDI"
+          echo "TEST TAMAMLANDI"
