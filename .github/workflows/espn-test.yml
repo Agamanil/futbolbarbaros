@@ -38,12 +38,14 @@ jobs:
             status=$(curl -L -sS \
               -o response.json \
               -w "%{http_code}" \
-              "https://site.api.espn.com/apis/site/v2/sports/soccer/$code/scoreboard?dates=20260901-20261130")
+              "https://site.api.espn.com/apis/site/v2/sports/soccer/$code/scoreboard")
 
             echo "HTTP STATUS: $status"
 
             if [ "$status" != "200" ]; then
               echo "BAGLANTI BASARISIZ"
+              echo "ESPN HATA CEVABI:"
+              cat response.json
               continue
             fi
 
