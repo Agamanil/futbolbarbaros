@@ -1,3 +1,4 @@
+
 import admin from 'firebase-admin';
 
 const LEAGUES = [
@@ -9,7 +10,7 @@ const LEAGUES = [
   { code: 'uefa.champions', names: ['champions league', 'şampiyonlar ligi', 'sampiyonlar ligi'] },
   { code: 'uefa.europa', names: ['europa league', 'avrupa ligi'] },
   { code: 'uefa.europa.conf', names: ['conference league', 'konferans ligi'] },
-  { code: 'uefa.nations', names: ['nations league', 'uluslar ligi', 'uluslar ligi'] }
+  { code: 'uefa.nations', names: ['nations league', 'uluslar ligi'] }
 ];
 
 const WINDOW_PAST_HOURS = 8;
@@ -32,8 +33,7 @@ function toMillis(value) {
   if (!value) return NaN;
   if (typeof value.toMillis === 'function') return value.toMillis();
   if (typeof value.toDate === 'function') return value.toDate().getTime();
-  const date = new Date(value);
-  return date.getTime();
+  return new Date(value).getTime();
 }
 
 function parseScore(value) {
@@ -51,7 +51,10 @@ function extractMatch(data, expectedId) {
     ...(Array.isArray(data?.competitions) ? data.competitions : []),
     ...(Array.isArray(data?.events?.[0]?.competitions) ? data.events[0].competitions : [])
   ];
-  const competition = competitions.find(item => Array.isArray(item?.competitors) && item.competitors.length >= 2);
+
+  const competition = competitions.find(item =>
+    Array.isArray(item?.competitors) && item.competitors.length >= 2
+  );
   if (!competition) return null;
 
   const status = competition.status || data?.status || header.status || {};
@@ -75,11 +78,16 @@ function extractMatch(data, expectedId) {
 async function fetchJson(url) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
   try {
     const response = await fetch(url, {
       signal: controller.signal,
-      headers: { 'User-Agent': 'FUTBOLBARBAROS-live-score/1.0', 'Accept': 'application/json' }
+      headers: {
+        'User-Agent': 'FUTBOLBARBAROS-live-score/1.0',
+        'Accept': 'application/json'
+      }
     });
+
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     return await response.json();
   } finally {
@@ -89,8 +97,10 @@ async function fetchJson(url) {
 
 async function fetchEvent(espnId, competition, savedCode) {
   const candidates = leagueCandidates(competition, savedCode);
+
   for (const league of candidates) {
     const url = `https://site.api.espn.com/apis/site/v2/sports/soccer/${league}/summary?event=${encodeURIComponent(espnId)}`;
+
     try {
       const data = await fetchJson(url);
       const match = extractMatch(data, espnId);
@@ -99,6 +109,7 @@ async function fetchEvent(espnId, competition, savedCode) {
       console.log(`ESPN ${espnId} / ${league}: ${error.message}`);
     }
   }
+
   return null;
 }
 
@@ -117,8 +128,6 @@ async function updateMatch(ref, current, event) {
     update.liveAwayScore = event.awayScore;
   }
 
-  // A live score is deliberately NOT written to homeScore/awayScore.
-  // The site's existing standings count only these final-result fields.
   if (event.completed && event.homeScore !== null && event.awayScore !== null) {
     update.homeScore = event.homeScore;
     update.awayScore = event.awayScore;
@@ -127,6 +136,7 @@ async function updateMatch(ref, current, event) {
     update.espnState = 'post';
     update.espnStatus = event.statusText || 'Final';
     update.scoreSource = 'espn';
+
     if (current.homeScore === undefined || current.awayScore === undefined) {
       update.resultAt = admin.firestore.FieldValue.serverTimestamp();
     }
@@ -137,18 +147,26 @@ async function updateMatch(ref, current, event) {
 
 async function main() {
   const rawCredentials = process.env.FIREBASE_SERVICE_ACCOUNT;
-  if (!rawCredentials) throw new Error('FIREBASE_SERVICE_ACCOUNT GitHub Secret tanımlı değil.');
+
+  if (!rawCredentials) {
+    throw new Error('FIREBASE_SERVICE_ACCOUNT GitHub Secret tanımlı değil.');
+  }
 
   const credentials = JSON.parse(rawCredentials);
+
   if (!admin.apps.length) {
-    admin.initializeApp({ credential: admin.credential.cert(credentials) });
+    admin.initializeApp({
+      credential: admin.credential.cert(credentials)
+    });
   }
+
   const db = admin.firestore();
   const now = Date.now();
   const minTime = now - WINDOW_PAST_HOURS * 60 * 60 * 1000;
   const maxTime = now + WINDOW_FUTURE_MINUTES * 60 * 1000;
 
   const groupsSnapshot = await db.collection('groups').get();
+
   let checked = 0;
   let updated = 0;
   let finished = 0;
@@ -156,23 +174,35 @@ async function main() {
 
   for (const groupDoc of groupsSnapshot.docs) {
     const matchesSnapshot = await groupDoc.ref.collection('matches').get();
+
     for (const matchDoc of matchesSnapshot.docs) {
       const match = matchDoc.data();
+
       if (!match.espnId || !/^\d{5,20}$/.test(String(match.espnId))) continue;
 
       const kickoffMs = toMillis(match.kickoff);
-      if (!Number.isFinite(kickoffMs) || kickoffMs < minTime || kickoffMs > maxTime) continue;
+
+      if (!Number.isFinite(kickoffMs) || kickoffMs < minTime || kickoffMs > maxTime) {
+        continue;
+      }
 
       checked++;
-      const event = await fetchEvent(String(match.espnId), match.competition, match.espnLeagueCode);
+
+      const event = await fetchEvent(
+        String(match.espnId),
+        match.competition,
+        match.espnLeagueCode
+      );
+
       if (!event) {
         skipped++;
-        console.log(`EŞLEŞME BULUNAMADI: ${groupDoc.id}/${matchDoc.id} ESPN=${match.espnId} (${match.competition || 'lig belirtilmemiş'})`);
+        console.log(
+          `EŞLEŞME BULUNAMADI: ${groupDoc.id}/${matchDoc.id} ESPN=${match.espnId}`
+        );
         continue;
       }
 
       if (event.homeScore === null || event.awayScore === null) {
-        // Pre-match events may not expose numeric scores yet; save only status metadata.
         if (event.state === 'pre') {
           await matchDoc.ref.update({
             espnLeagueCode: event.league,
@@ -189,13 +219,19 @@ async function main() {
 
       await updateMatch(matchDoc.ref, match, event);
       updated++;
+
       if (event.completed) finished++;
-      console.log(`${groupDoc.id} | ${match.homeTeam || '?'} ${event.homeScore}-${event.awayScore} ${match.awayTeam || '?'} | ${event.state}${event.completed ? ' FINAL' : ''} | ESPN ${match.espnId}`);
+
+      console.log(
+        `${groupDoc.id} | ${match.homeTeam || '?'} ${event.homeScore}-${event.awayScore} ${match.awayTeam || '?'} | ${event.state}${event.completed ? ' FINAL' : ''} | ESPN ${match.espnId}`
+      );
     }
   }
 
   console.log('--- FUTBOLBARBAROS ESPN ÖZET ---');
-  console.log(`Grup: ${groupsSnapshot.size} | Kontrol edilen maç: ${checked} | Güncellenen: ${updated} | Biten: ${finished} | Eşleşmeyen/atlanan: ${skipped}`);
+  console.log(
+    `Grup: ${groupsSnapshot.size} | Kontrol edilen maç: ${checked} | Güncellenen: ${updated} | Biten: ${finished} | Eşleşmeyen/atlanan: ${skipped}`
+  );
 }
 
 main().catch(error => {
