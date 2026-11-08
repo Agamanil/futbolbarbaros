@@ -872,9 +872,14 @@ $('matchForm').addEventListener('submit', async e => {
   const homeTeam = $('homeTeam').value.trim();
   const awayTeam = $('awayTeam').value.trim();
   const competition = $('competition').value.trim() || 'Futbol';
+  const espnId = $('newMatchEspnId')?.value.trim() || '';
 
   if (!homeTeam || !awayTeam) {
     return message($('matchFormMessage'), 'İki takımın adını da gir.');
+  }
+
+  if (espnId && !/^\d{5,20}$/.test(espnId)) {
+    return message($('matchFormMessage'), 'ESPN maç ID'si yalnızca rakamlardan oluşmalı.');
   }
 
   if (!kickoff || !predictionOpenAt || !predictionCloseAt) {
@@ -900,6 +905,7 @@ $('matchForm').addEventListener('submit', async e => {
       homeTeam,
       awayTeam,
       competition,
+      espnId,
       kickoff: Timestamp.fromDate(kickoff),
       predictionOpenAt: Timestamp.fromDate(predictionOpenAt),
       predictionCloseAt: Timestamp.fromDate(predictionCloseAt),
@@ -948,6 +954,11 @@ function renderAdminMatches() {
       <label>Tahmin açılışı<input type="datetime-local" id="open-${safe(m.id)}" value="${safe(toLocalInput(m.predictionOpenAt))}"></label>
       <label>Tahmin kapanışı<input type="datetime-local" id="close-${safe(m.id)}" value="${safe(toLocalInput(m.predictionCloseAt))}"></label>
       <button class="small-btn" data-save-schedule="${safe(m.id)}">Saatleri kaydet</button>
+      <label style="display:block;margin-top:10px;">ESPN maç ID'si
+        <input type="text" id="espn-${safe(m.id)}" value="${safe(m.espnId || '')}" placeholder="Örn: 401861145" inputmode="numeric" autocomplete="off">
+      </label>
+      <button class="small-btn" type="button" data-save-espn="${safe(m.id)}">ESPN ID kaydet</button>
+      <div class="match-meta" style="margin-top:5px;">${m.espnId ? 'ESPN bağlantısı tanımlı' : 'Henüz ESPN bağlantısı yok'}</div>
       <button class="danger-btn" type="button" data-delete-match="${safe(m.id)}" style="margin-top:8px;">Maçı sil</button>
       <div style="margin-top:10px;padding:12px;border:1px solid var(--border, rgba(255,255,255,.12));border-radius:10px;">
         <b style="display:block;margin-bottom:8px;">${hasResult(m) ? `Kayıtlı sonuç: ${m.homeScore} - ${m.awayScore}` : 'Maç sonucu gir'}</b>
@@ -1001,6 +1012,30 @@ function renderAdminMatches() {
       } catch (err) {
         console.error(err);
         alert('Saatler kaydedilemedi: ' + err.message);
+      } finally {
+        button.disabled = false;
+      }
+    });
+  });
+
+  el.querySelectorAll('[data-save-espn]').forEach(button => {
+    button.addEventListener('click', async () => {
+      if (!isAdmin()) return alert('Yönetici yetkisi yok.');
+
+      const id = button.dataset.saveEspn;
+      const espnId = $(`espn-${id}`)?.value.trim() || '';
+
+      if (espnId && !/^\d{5,20}$/.test(espnId)) {
+        return alert('ESPN maç ID'si yalnızca rakamlardan oluşmalı.');
+      }
+
+      button.disabled = true;
+      try {
+        await updateDoc(doc(db, 'groups', groupCode, 'matches', id), { espnId });
+        alert(espnId ? 'ESPN maç ID'si kaydedildi.' : 'ESPN maç bağlantısı kaldırıldı.');
+      } catch (err) {
+        console.error(err);
+        alert('ESPN ID kaydedilemedi: ' + err.message);
       } finally {
         button.disabled = false;
       }
