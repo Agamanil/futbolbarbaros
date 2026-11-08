@@ -1,5 +1,5 @@
 
-name: ESPN Connection Test
+name: ESPN Competition Coverage Test
 
 on:
   workflow_dispatch:
@@ -9,20 +9,57 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Test ESPN
+      - name: Test ESPN Competitions
         run: |
-          echo "ESPN baglantisi test ediliyor..."
+          echo "ESPN LIG TESTLERI BASLIYOR"
 
-          curl -L -sS \
-            -o response.json \
-            -w "HTTP STATUS: %{http_code}\n" \
-            "https://site.api.espn.com/apis/site/v2/sports/soccer/eng.1/scoreboard"
+          competitions=(
+            "tur.1|Türkiye Süper Lig"
+            "eng.1|Premier League"
+            "esp.1|La Liga"
+            "ger.1|Bundesliga"
+            "ita.1|Serie A"
+            "uefa.champions|Şampiyonlar Ligi"
+            "uefa.europa|Avrupa Ligi"
+            "uefa.europa.conf|Konferans Ligi"
+            "uefa.nations|UEFA Uluslar Ligi"
+          )
 
-          echo "LIG:"
-          jq -r '.leagues[0].name' response.json
+          for item in "${competitions[@]}"; do
+            code="${item%%|*}"
+            name="${item#*|}"
 
-          echo "EVENT SAYISI:"
-          jq '.events | length' response.json
+            echo ""
+            echo "================================"
+            echo "LIG: $name"
+            echo "KOD: $code"
+            echo "================================"
 
-          echo "MACLAR:"
-          jq -r '.events[]? | "\(.name) | \(.date) | \(.status.type.description)"' response.json
+            status=$(curl -L -sS \
+              -o response.json \
+              -w "%{http_code}" \
+              "https://site.api.espn.com/apis/site/v2/sports/soccer/$code/scoreboard?dates=20260901-20261130")
+
+            echo "HTTP STATUS: $status"
+
+            if [ "$status" != "200" ]; then
+              echo "BAGLANTI BASARISIZ"
+              continue
+            fi
+
+            echo "ESPN LIG ADI:"
+            jq -r '.leagues[0].name // "LIG BILGISI YOK"' response.json
+
+            echo "MAC SAYISI:"
+            jq '(.events // []) | length' response.json
+
+            echo "MACLAR:"
+            jq -r '
+              (.events // [])[:10][] |
+              "\(.name) | \(.date) | \(.status.type.description)"
+            ' response.json
+
+          done
+
+          echo ""
+          echo "BUTUN LIG TESTLERI TAMAMLANDI"
