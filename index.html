@@ -391,7 +391,15 @@
         <div id="leagueManagerMessage" class="message" aria-live="polite"></div>
       </div>
 
-      <div class="card admin-card">
+      <div class="card admin-card" id="userManagementCard">
+  <h4>Kullanıcı Yönetimi</h4>
+  <p class="match-meta">
+    Bu ligden çıkarma yalnızca seçili ligi etkiler. Kalıcı ban ve süreli timeout ise kullanıcının FUTBOLBARBAROS genelindeki tüm liglere erişimini engeller.
+  </p>
+  <div id="userManagementList">
+    <p class="match-meta">Oyuncular yükleniyor...</p>
+  </div>
+</div>
         <h4>Seçili Maçları Başka Lige Kopyala</h4>
         <p class="match-meta">
           Kaynak lig, üstte seçili olan ligdir. Aşağıdaki listeden istediğin maçları işaretle ve hedef ligi seç.
@@ -490,5 +498,7 @@
 
   <script type="module" src="app.js"></script>
   <script type="module" src="season.js"></script>
+    <script type="module" src="moderation.js"></script>
+  <script type="module" src="risk.js"></script>
 </body>
 </html>
