@@ -1,0 +1,15 @@
+<!-- 1) Bu karti index.html icinde adminTab alanina, tercihen "Ligleri Yonet" kartinin hemen altina ekle. -->
+<div class="card admin-card" id="userManagementCard">
+  <h4>Kullanıcı Yönetimi</h4>
+  <p class="match-meta">
+    Bu ligden çıkarma yalnızca seçili ligi etkiler. Kalıcı ban ve süreli timeout ise kullanıcının FUTBOLBARBAROS genelindeki tüm liglere erişimini engeller.
+  </p>
+  <div id="userManagementList">
+    <p class="match-meta">Oyuncular yükleniyor...</p>
+  </div>
+</div>
+
+<!-- 2) index.html dosyasinin en altindaki mevcut app.js ve season.js script satirlarini KORU.
+     Asagidaki iki satiri onlarin hemen altina ekle. -->
+<script type="module" src="moderation.js"></script>
+<script type="module" src="risk.js"></script>

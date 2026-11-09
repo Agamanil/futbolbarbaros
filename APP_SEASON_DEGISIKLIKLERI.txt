@@ -1,0 +1,133 @@
+APP.JS DEGISIKLIKLERI
+====================
+
+A) renderMatches() fonksiyonunda mac kartini baslatan su satiri bul:
+
+<article class="match-card">
+
+Bunu bununla degistir:
+
+<article class="match-card" data-match-id="${safe(m.id)}">
+
+B) renderAdminMatches() fonksiyonunda su satiri bul:
+
+<article class="match-card admin-match-card">
+
+Bunu bununla degistir:
+
+<article class="match-card admin-match-card" data-admin-match-id="${safe(m.id)}">
+
+C) calculateStandings() fonksiyonunun TAMAMINI asagidakiyle degistir:
+
+function calculateStandings() {
+  const finished = matches.filter(hasResult);
+  const bonusIds = bonusMatchIds();
+  const allMatchIds = new Set(matches.map(match => match.id));
+
+  return players.map(p => ({
+    ...p,
+    pts: finished.reduce(
+      (sum, m) => sum + pointsFor(m, m.predictions?.[p.id], bonusIds),
+      0
+    ) + (window.FUTBOLBARBAROS_RISK_POINTS?.(p.id, allMatchIds) || 0),
+    played: finished.length
+  })).sort((a, b) => b.pts - a.pts || a.name.localeCompare(b.name, 'tr'));
+}
+
+D) app.js dosyasinin en altina, boot().catch(...) blogunun HEMEN ALTINA sunu ekle:
+
+window.addEventListener('fb-risk-updated', () => {
+  renderTable();
+  renderMatches();
+});
+
+
+SEASON.JS DEGISIKLIKLERI
+=======================
+
+A) calculateDaily(date) fonksiyonunun TAMAMINI asagidakiyle degistir:
+
+function calculateDaily(date) {
+  const dayMatches = seasonMatches().filter(match => dayKey(match.kickoff) === date);
+  const dayMatchIds = new Set(dayMatches.map(match => match.id));
+  const riskReady = window.FUTBOLBARBAROS_RISK_READY === true;
+  const pendingRisks = window.FUTBOLBARBAROS_RISK_PENDING?.(dayMatchIds) || 0;
+  const riskPoints = (userId) => window.FUTBOLBARBAROS_RISK_POINTS?.(userId, dayMatchIds) || 0;
+  const completed = dayMatches.length > 0
+    && dayMatches.every(hasResult)
+    && riskReady
+    && pendingRisks === 0;
+  const bonusIds = selectedMatchIds();
+  const standings = players.map(person => ({
+    id: person.id,
+    name: person.name || 'Oyuncu',
+    points: dayMatches.reduce((total, match) =>
+      total + pointsFor(match, match.predictions?.[person.id], bonusIds), 0) + riskPoints(person.id),
+    played: dayMatches.filter(hasResult).length
+  })).sort((a, b) => b.points - a.points || a.name.localeCompare(b.name, 'tr'));
+
+  let lastPlayers = [];
+  let topPlayers = [];
+  if (completed && standings.length) {
+    const lowest = Math.min(...standings.map(item => item.points));
+    const highest = Math.max(...standings.map(item => item.points));
+    lastPlayers = standings.filter(item => item.points === lowest);
+    topPlayers = standings.filter(item => item.points === highest);
+  }
+  return {
+    date, matches: dayMatches, pending: dayMatches.filter(match => !hasResult(match)),
+    completed, standings, lastPlayers, topPlayers
+  };
+}
+
+B) calculateSeason() fonksiyonunun TAMAMINI asagidakiyle degistir:
+
+function calculateSeason() {
+  const season = getSelectedSeason();
+  if (!season) return { fixtures: [], finished: [], rows: [], complete: false, winners: [], lastPlayers: [] };
+
+  const fixtures = seasonMatches();
+  const finished = fixtures.filter(hasResult);
+  const fixtureIds = new Set(fixtures.map(match => match.id));
+  const riskReady = window.FUTBOLBARBAROS_RISK_READY === true;
+  const pendingRisks = window.FUTBOLBARBAROS_RISK_PENDING?.(fixtureIds) || 0;
+  const riskPoints = (userId) => window.FUTBOLBARBAROS_RISK_POINTS?.(userId, fixtureIds) || 0;
+  const bonusIds = selectedMatchIds();
+  const rows = players.map(person => ({
+    id: person.id,
+    name: person.name || 'Oyuncu',
+    points: finished.reduce((total, match) =>
+      total + pointsFor(match, match.predictions?.[person.id], bonusIds), 0) + riskPoints(person.id),
+    played: finished.length
+  })).sort((a, b) => b.points - a.points || a.name.localeCompare(b.name, 'tr'));
+
+  const complete = dayKey() >= season.endDate
+    && fixtures.length > 0
+    && finished.length === fixtures.length
+    && riskReady
+    && pendingRisks === 0;
+  let winners = [];
+  let lastPlayers = [];
+  if (complete && rows.length) {
+    const highest = Math.max(...rows.map(row => row.points));
+    const lowest = Math.min(...rows.map(row => row.points));
+    winners = rows.filter(row => row.points === highest);
+    lastPlayers = rows.filter(row => row.points === lowest);
+  }
+  return { fixtures, finished, rows, complete, winners, lastPlayers };
+}
+
+C) season.js dosyasinin en altina su dinleyiciyi ekle:
+
+window.addEventListener('fb-risk-updated', () => renderAll());
+
+
+KONTROL LISTESI
+===============
+[ ] renderMatches mac kartinda data-match-id eklendi.
+[ ] renderAdminMatches mac kartinda data-admin-match-id eklendi.
+[ ] app.js calculateStandings degistirildi.
+[ ] app.js risk event dinleyicisi eklendi.
+[ ] season.js calculateDaily degistirildi.
+[ ] season.js calculateSeason degistirildi.
+[ ] season.js risk event dinleyicisi eklendi.
