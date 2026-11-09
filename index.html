@@ -327,6 +327,12 @@
         <h3>Yönetici Paneli</h3>
       </div>
 
+      <section class="card admin-card" id="moderationAdminCard">
+        <h4>Oyuncu Yönetimi</h4>
+        <p class="match-meta">Seçili ligden oyuncu çıkarabilir; site genelinde kalıcı ban veya süreli timeout uygulayabilirsin. Ligden çıkarma geçmiş tahminleri ve bonus kayıtlarını silmez.</p>
+        <div id="userManagementList" aria-live="polite"><p class="match-meta">Oyuncu listesi yükleniyor...</p></div>
+      </section>
+
       <div class="card admin-card">
         <h4>Profil Fotoğrafı Galerisi</h4>
         <p class="match-meta">Buraya yüklediğin fotoğraflar tüm oyuncuların seçim galerisine eklenir. Görseller otomatik olarak 256×256 boyutuna küçültülür.</p>
@@ -490,5 +496,7 @@
 
   <script type="module" src="app.js"></script>
   <script type="module" src="season.js"></script>
+  <script type="module" src="moderation.js"></script>
+  <script type="module" src="risk.js"></script>
 </body>
 </html>

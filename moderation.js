@@ -166,31 +166,27 @@ async function attachGroup(code) {
 }
 
 async function kickFromLeague(targetUid, button) {
-  if (!isAdmin() || !groupCode || targetUid === uid) return alert('Bu işlem için yetki yok veya kendi hesabını çıkaramazsın.');
+  if (!isAdmin() || !groupCode || targetUid === uid) {
+    return alert('Bu işlem için yetki yok veya kendi hesabını çıkaramazsın.');
+  }
+
   const target = players.find(item => item.id === targetUid);
   if (!target) return alert('Oyuncu bulunamadı.');
-  const approved = confirm(`${target.name} bu ligden çıkarılacak.\n\nBu oyuncunun maç tahminleri ve günlük bonus seçimleri de bu ligden silinecek. Risk katılım kayıtları ve diğer liglerdeki üyeliği korunur. Devam edilsin mi?`);
+
+  const approved = confirm(
+    `${target.name} bu ligden çıkarılacak.\n\n` +
+    'Mevcut maç tahminleri ve bonus geçmişi korunacak. ' +
+    'Kullanıcı lig koduyla yeniden katılabilir. Devam edilsin mi?'
+  );
   if (!approved) return;
+
   button.disabled = true;
   try {
-    const operations = [];
-    for (const match of matches) {
-      if (match.predictions && Object.prototype.hasOwnProperty.call(match.predictions, targetUid)) {
-        operations.push(updateDoc(doc(db, 'groups', groupCode, 'matches', match.id), {
-          [`predictions.${targetUid}`]: deleteField()
-        }));
-      }
-    }
-    for (const selection of bonusSelections) {
-      if (selection.uid === targetUid) {
-        operations.push(deleteDoc(doc(db, 'groups', groupCode, 'bonusSelections', selection.id)));
-      }
-    }
-    await Promise.all(operations);
+    // Yalnızca üyelik belgesini kaldır. Geçmiş tahminlere ve bonus kayıtlarına dokunma.
     await deleteDoc(doc(db, 'groups', groupCode, 'players', targetUid));
-    alert(`${target.name} bu ligden çıkarıldı.`);
+    alert(`${target.name} bu ligden çıkarıldı. Geçmiş kayıtları korundu.`);
   } catch (error) {
-    console.error('Oyuncu ligden cikarilamadi:', error);
+    console.error('Oyuncu ligden çıkarılamadı:', error);
     alert('Oyuncu çıkarılamadı: ' + (error.message || error));
   } finally {
     button.disabled = false;

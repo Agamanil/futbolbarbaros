@@ -1,35 +1,78 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    function signedIn() { return request.auth != null; }
-    function isMember(groupId) {
-      return signedIn() && exists(/databases/$(database)/documents/groups/$(groupId)/players/$(request.auth.uid));
+    function signedIn() {
+      return request.auth != null;
     }
+
     function isAdmin() {
-      return signedIn() && request.auth.uid == 'YONETICI_UID_BURAYA';
+      return signedIn()
+        && request.auth.uid == 'YONETICI_UID_BURAYA';
+    }
+
+    function isRestricted(userId) {
+      let restrictionPath = /databases/$(database)/documents/userModeration/$(userId);
+      return exists(restrictionPath)
+        && (
+          get(restrictionPath).data.get('banned', false) == true
+          || (
+            get(restrictionPath).data.get('timeoutUntil', null) is timestamp
+            && get(restrictionPath).data.get('timeoutUntil', null) > request.time
+          )
+        );
+    }
+
+    function canUseSite() {
+      return signedIn() && !isRestricted(request.auth.uid);
+    }
+
+    function isMember(groupId) {
+      return canUseSite()
+        && exists(/databases/$(database)/documents/groups/$(groupId)/players/$(request.auth.uid));
+    }
+
+    function matchExists(groupId, matchId) {
+      return exists(/databases/$(database)/documents/groups/$(groupId)/matches/$(matchId));
     }
 
     match /groups/{groupId} {
-      // Grup kodunu bilen oturum açmış kullanıcı, katılabilmek için grup belgesini okuyabilir.
+      // Lig kodunu bilen oturum açmış kullanıcı lig belgesinin varlığını kontrol edebilir.
       allow get: if signedIn();
       allow list: if isAdmin();
       allow create, update, delete: if isAdmin();
 
       match /players/{playerId} {
-        allow read: if isMember(groupId) || isAdmin();
-        allow create: if signedIn() && playerId == request.auth.uid
+        // Yeni katılan kişi de aynı isim kullanılmış mı diye oyuncu listesini sorgular.
+        // Lig kodu bilinmeden grup belgesine/listesine erişilemez.
+        allow get, list: if isAdmin() || (signedIn() && !isRestricted(request.auth.uid));
+
+        allow create: if canUseSite()
+          && playerId == request.auth.uid
           && request.resource.data.uid == request.auth.uid
+          && request.resource.data.keys().hasAll(['name', 'uid', 'joinedAt'])
           && request.resource.data.keys().hasOnly(['name', 'uid', 'joinedAt', 'points'])
           && request.resource.data.name is string
           && request.resource.data.name.size() >= 2
           && request.resource.data.name.size() <= 18
+          && request.resource.data.joinedAt == request.time
           && exists(/databases/$(database)/documents/groups/$(groupId));
-        allow update, delete: if isAdmin();
+
+        // Kullanıcı yalnızca kendi görünen adını değiştirebilir.
+        allow update: if isAdmin() || (
+          canUseSite()
+          && playerId == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name'])
+          && request.resource.data.name is string
+          && request.resource.data.name.size() >= 2
+          && request.resource.data.name.size() <= 18
+        );
+        allow delete: if isAdmin();
       }
 
       match /matches/{matchId} {
         allow read: if isMember(groupId) || isAdmin();
         allow create, delete: if isAdmin();
+
         allow update: if isAdmin() || (
           isMember(groupId)
           && request.time < resource.data.kickoff
@@ -40,10 +83,138 @@ service cloud.firestore {
           && request.resource.data.predictions[request.auth.uid].away is int
           && request.resource.data.predictions[request.auth.uid].home >= 0
           && request.resource.data.predictions[request.auth.uid].home <= 30
+          && request.resource.data.predictions[request.auth.uid].away is int
           && request.resource.data.predictions[request.auth.uid].away >= 0
           && request.resource.data.predictions[request.auth.uid].away <= 30
         );
+
+        match /risks/{riskId} {
+          allow read: if isMember(groupId) || isAdmin();
+
+          allow create: if isAdmin()
+            && request.resource.data.keys().hasAll([
+              'matchId', 'question', 'plusPoints', 'minusPoints',
+              'status', 'createdAt', 'createdBy'
+            ])
+            && request.resource.data.keys().hasOnly([
+              'matchId', 'question', 'plusPoints', 'minusPoints',
+              'status', 'createdAt', 'createdBy'
+            ])
+            && request.resource.data.matchId == matchId
+            && request.resource.data.question is string
+            && request.resource.data.question.size() >= 4
+            && request.resource.data.question.size() <= 160
+            && request.resource.data.plusPoints is int
+            && request.resource.data.plusPoints >= 1
+            && request.resource.data.plusPoints <= 50
+            && request.resource.data.minusPoints is int
+            && request.resource.data.minusPoints >= -50
+            && request.resource.data.minusPoints <= -1
+            && request.resource.data.status == 'open'
+            && request.resource.data.createdBy == request.auth.uid
+            && request.resource.data.createdAt == request.time
+            && matchExists(groupId, matchId)
+            && get(/databases/$(database)/documents/groups/$(groupId)/matches/$(matchId)).data.kickoff > request.time
+            && get(/databases/$(database)/documents/groups/$(groupId)/matches/$(matchId)).data.get('homeScore', null) == null
+            && get(/databases/$(database)/documents/groups/$(groupId)/matches/$(matchId)).data.get('awayScore', null) == null;
+
+          // Yönetici yalnızca etkinliğin sonucunu kaydedebilir/düzeltebilir.
+          allow update: if isAdmin()
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'status', 'outcome', 'resolvedAt', 'resolvedBy'
+            ])
+            && request.resource.data.status == 'resolved'
+            && request.resource.data.outcome is bool
+            && request.resource.data.resolvedBy == request.auth.uid
+            && request.resource.data.resolvedAt == request.time
+            && matchExists(groupId, matchId)
+            && get(/databases/$(database)/documents/groups/$(groupId)/matches/$(matchId)).data.kickoff <= request.time;
+          allow delete: if isAdmin();
+
+          match /participants/{participantId} {
+            allow read: if isMember(groupId) || isAdmin();
+
+            // Bir oyuncu aynı etkinliğe yalnızca bir kez ve maç başlamadan katılabilir.
+            allow create: if isMember(groupId)
+              && participantId == request.auth.uid
+              && request.resource.data.keys().hasAll(['uid', 'playerName', 'choice', 'acceptedAt'])
+              && request.resource.data.keys().hasOnly(['uid', 'playerName', 'choice', 'acceptedAt'])
+              && request.resource.data.uid == request.auth.uid
+              && request.resource.data.playerName is string
+              && request.resource.data.choice in ['yes', 'no']
+              && request.resource.data.acceptedAt == request.time
+              && get(/databases/$(database)/documents/groups/$(groupId)/matches/$(matchId)/risks/$(riskId)).data.status == 'open'
+              && get(/databases/$(database)/documents/groups/$(groupId)/matches/$(matchId)).data.kickoff > request.time
+              && get(/databases/$(database)/documents/groups/$(groupId)/matches/$(matchId)).data.get('homeScore', null) == null
+              && get(/databases/$(database)/documents/groups/$(groupId)/matches/$(matchId)).data.get('awayScore', null) == null;
+
+            // Katılımcı seçimi sonradan değiştirilemez veya silinemez.
+            allow update, delete: if false;
+          }
+        }
       }
+
+      match /bonusSelections/{selectionId} {
+        allow read: if isMember(groupId) || isAdmin();
+        allow create: if isMember(groupId)
+          && request.resource.data.keys().hasAll([
+            'uid', 'playerName', 'matchId', 'homeTeam', 'awayTeam',
+            'selectionDay', 'targetDate', 'selectedAt'
+          ])
+          && request.resource.data.keys().hasOnly([
+            'uid', 'playerName', 'matchId', 'homeTeam', 'awayTeam',
+            'selectionDay', 'targetDate', 'selectedAt'
+          ])
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.selectedAt == request.time
+          && request.resource.data.matchId is string
+          && matchExists(groupId, request.resource.data.matchId)
+          && get(/databases/$(database)/documents/groups/$(groupId)/matches/$(request.resource.data.matchId)).data.kickoff > request.time;
+        allow update, delete: if isAdmin();
+      }
+
+      match /seasons/{seasonId} {
+        allow read: if isMember(groupId) || isAdmin();
+        allow create, update, delete: if isAdmin();
+      }
+
+      match /seasonHonor/{seasonId} {
+        allow read: if isMember(groupId) || isAdmin();
+        allow create, update, delete: if isAdmin();
+
+        match /members/{playerId} {
+          allow read: if isMember(groupId) || isAdmin();
+          allow create, update, delete: if isAdmin();
+        }
+      }
+    }
+
+    // Site genelindeki kalıcı ban ve timeout kayıtları.
+    match /userModeration/{userId} {
+      allow get: if signedIn() && (request.auth.uid == userId || isAdmin());
+      allow list: if isAdmin();
+      allow create, update, delete: if isAdmin() && userId != request.auth.uid;
+    }
+
+    // Profil avatar tercihleri: herkes okuyabilir, kullanıcı yalnızca kendi kaydını yazar.
+    match /users/{userId} {
+      allow read: if signedIn() && !isRestricted(request.auth.uid);
+      allow create, update: if canUseSite()
+        && userId == request.auth.uid
+        && request.resource.data.keys().hasOnly(['avatarId', 'updatedAt'])
+        && request.resource.data.avatarId is string
+        && request.resource.data.updatedAt == request.time;
+      allow delete: if false;
+    }
+
+    // Avatar galerisi: üyeler görür, yalnızca yönetici yükler/siler.
+    match /avatars/{avatarId} {
+      allow read: if signedIn();
+      allow create: if isAdmin()
+        && request.resource.data.keys().hasAll(['name', 'dataUrl', 'mimeType', 'createdAt', 'createdBy'])
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.createdAt == request.time;
+      allow update, delete: if isAdmin();
     }
   }
 }
