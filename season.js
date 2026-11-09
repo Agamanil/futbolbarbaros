@@ -149,13 +149,20 @@ function pointsFor(match, prediction, bonusIds) {
 
 function calculateDaily(date) {
   const dayMatches = seasonMatches().filter(match => dayKey(match.kickoff) === date);
-  const completed = dayMatches.length > 0 && dayMatches.every(hasResult);
+  const dayMatchIds = new Set(dayMatches.map(match => match.id));
+  const riskReady = window.FUTBOLBARBAROS_RISK_READY === true;
+  const pendingRisks = window.FUTBOLBARBAROS_RISK_PENDING?.(dayMatchIds) || 0;
+  const riskPoints = (userId) => window.FUTBOLBARBAROS_RISK_POINTS?.(userId, dayMatchIds) || 0;
+  const completed = dayMatches.length > 0
+    && dayMatches.every(hasResult)
+    && riskReady
+    && pendingRisks === 0;
   const bonusIds = selectedMatchIds();
   const standings = players.map(person => ({
     id: person.id,
     name: person.name || 'Oyuncu',
     points: dayMatches.reduce((total, match) =>
-      total + pointsFor(match, match.predictions?.[person.id], bonusIds), 0),
+      total + pointsFor(match, match.predictions?.[person.id], bonusIds), 0) + riskPoints(person.id),
     played: dayMatches.filter(hasResult).length
   })).sort((a, b) => b.points - a.points || a.name.localeCompare(b.name, 'tr'));
 
@@ -172,6 +179,12 @@ function calculateDaily(date) {
     completed, standings, lastPlayers, topPlayers
   };
 }
+  }
+  return {
+    date, matches: dayMatches, pending: dayMatches.filter(match => !hasResult(match)),
+    completed, standings, lastPlayers, topPlayers
+  };
+}
 
 function calculateSeason() {
   const season = getSelectedSeason();
@@ -179,16 +192,24 @@ function calculateSeason() {
 
   const fixtures = seasonMatches();
   const finished = fixtures.filter(hasResult);
+  const fixtureIds = new Set(fixtures.map(match => match.id));
+  const riskReady = window.FUTBOLBARBAROS_RISK_READY === true;
+  const pendingRisks = window.FUTBOLBARBAROS_RISK_PENDING?.(fixtureIds) || 0;
+  const riskPoints = (userId) => window.FUTBOLBARBAROS_RISK_POINTS?.(userId, fixtureIds) || 0;
   const bonusIds = selectedMatchIds();
   const rows = players.map(person => ({
     id: person.id,
     name: person.name || 'Oyuncu',
     points: finished.reduce((total, match) =>
-      total + pointsFor(match, match.predictions?.[person.id], bonusIds), 0),
+      total + pointsFor(match, match.predictions?.[person.id], bonusIds), 0) + riskPoints(person.id),
     played: finished.length
   })).sort((a, b) => b.points - a.points || a.name.localeCompare(b.name, 'tr'));
 
-  const complete = dayKey() >= season.endDate && fixtures.length > 0 && finished.length === fixtures.length;
+  const complete = dayKey() >= season.endDate
+    && fixtures.length > 0
+    && finished.length === fixtures.length
+    && riskReady
+    && pendingRisks === 0;
   let winners = [];
   let lastPlayers = [];
   if (complete && rows.length) {
@@ -985,3 +1006,4 @@ window.addEventListener('focus', renderAll);
 setInterval(() => {
   if (groupCode) renderAll();
 }, 30000);
+window.addEventListener('fb-risk-updated', () => renderAll());
