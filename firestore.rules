@@ -6,7 +6,7 @@ service cloud.firestore {
       return signedIn() && exists(/databases/$(database)/documents/groups/$(groupId)/players/$(request.auth.uid));
     }
     function isAdmin() {
-      return signedIn() && request.auth.uid == 'MUxQ8O20qXa5DzWB7LTMMjilJ0Y2';
+      return signedIn() && request.auth.uid == 'YONETICI_UID_BURAYA';
     }
 
     match /groups/{groupId} {

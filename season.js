@@ -149,20 +149,13 @@ function pointsFor(match, prediction, bonusIds) {
 
 function calculateDaily(date) {
   const dayMatches = seasonMatches().filter(match => dayKey(match.kickoff) === date);
-  const dayMatchIds = new Set(dayMatches.map(match => match.id));
-  const riskReady = window.FUTBOLBARBAROS_RISK_READY === true;
-  const pendingRisks = window.FUTBOLBARBAROS_RISK_PENDING?.(dayMatchIds) || 0;
-  const riskPoints = (userId) => window.FUTBOLBARBAROS_RISK_POINTS?.(userId, dayMatchIds) || 0;
-  const completed = dayMatches.length > 0
-    && dayMatches.every(hasResult)
-    && riskReady
-    && pendingRisks === 0;
+  const completed = dayMatches.length > 0 && dayMatches.every(hasResult);
   const bonusIds = selectedMatchIds();
   const standings = players.map(person => ({
     id: person.id,
     name: person.name || 'Oyuncu',
     points: dayMatches.reduce((total, match) =>
-      total + pointsFor(match, match.predictions?.[person.id], bonusIds), 0) + riskPoints(person.id),
+      total + pointsFor(match, match.predictions?.[person.id], bonusIds), 0),
     played: dayMatches.filter(hasResult).length
   })).sort((a, b) => b.points - a.points || a.name.localeCompare(b.name, 'tr'));
 
@@ -174,15 +167,9 @@ function calculateDaily(date) {
     lastPlayers = standings.filter(item => item.points === lowest);
     topPlayers = standings.filter(item => item.points === highest);
   }
-
   return {
-    date,
-    matches: dayMatches,
-    pending: dayMatches.filter(match => !hasResult(match)),
-    completed,
-    standings,
-    lastPlayers,
-    topPlayers
+    date, matches: dayMatches, pending: dayMatches.filter(match => !hasResult(match)),
+    completed, standings, lastPlayers, topPlayers
   };
 }
 
@@ -192,24 +179,16 @@ function calculateSeason() {
 
   const fixtures = seasonMatches();
   const finished = fixtures.filter(hasResult);
-  const fixtureIds = new Set(fixtures.map(match => match.id));
-  const riskReady = window.FUTBOLBARBAROS_RISK_READY === true;
-  const pendingRisks = window.FUTBOLBARBAROS_RISK_PENDING?.(fixtureIds) || 0;
-  const riskPoints = (userId) => window.FUTBOLBARBAROS_RISK_POINTS?.(userId, fixtureIds) || 0;
   const bonusIds = selectedMatchIds();
   const rows = players.map(person => ({
     id: person.id,
     name: person.name || 'Oyuncu',
     points: finished.reduce((total, match) =>
-      total + pointsFor(match, match.predictions?.[person.id], bonusIds), 0) + riskPoints(person.id),
+      total + pointsFor(match, match.predictions?.[person.id], bonusIds), 0),
     played: finished.length
   })).sort((a, b) => b.points - a.points || a.name.localeCompare(b.name, 'tr'));
 
-  const complete = dayKey() >= season.endDate
-    && fixtures.length > 0
-    && finished.length === fixtures.length
-    && riskReady
-    && pendingRisks === 0;
+  const complete = dayKey() >= season.endDate && fixtures.length > 0 && finished.length === fixtures.length;
   let winners = [];
   let lastPlayers = [];
   if (complete && rows.length) {
@@ -676,7 +655,7 @@ function renderAll() {
     if (kicker) kicker.textContent = `${formatDay(season.startDate)} – ${formatDay(season.endDate)} · SEZON ÖZELİ`;
     if (tableHeading) tableHeading.textContent = `${season.name} · Puan Tablosu`;
     if (explanation) {
-      explanation.textContent = `Bu tablo yalnızca ${formatDay(season.startDate)} – ${formatDay(season.endDate)} arasındaki maçları sayar. Genel tablo tüm lig maçlarını içerir.`;
+      explanation.textContent = `Bu tablo yalnızca ${formatDay(season.startDate)} – ${formatDay(season.endDate)} arasındaki maçları sayar. Genel tablo tüm lig maçlarını içerir. Bonus açıkken seçilen maçta doğru skor 6, doğru sonuç 2 puandır.`;
     }
     if (status) {
       if (seasonResult.complete) {
@@ -821,11 +800,13 @@ function tryAttachCurrentLeague() {
   attachLeague(select.value);
 }
 
+// Sezon görüntüleme seçimi: yalnızca bu cihazdaki görünümü değiştirir.
 $('seasonViewSelect')?.addEventListener('change', event => {
   selectedSeasonId = event.target.value || '';
   renderAll();
 });
 
+// Yönetici seçili lig için yeni sezon açar. Tarih aralıkları çakışamaz.
 $('seasonCreateForm')?.addEventListener('submit', async event => {
   event.preventDefault();
   const status = $('seasonAdminMessage');
@@ -862,6 +843,7 @@ $('seasonCreateForm')?.addEventListener('submit', async event => {
     if (!targetGroups.length) throw new Error('İşlem yapılacak lig bulunamadı.');
     if (targetGroups.length * 3 > 450) throw new Error('Toplu işlem güvenli işlem sınırını aşıyor. Ligleri daha küçük gruplar hâlinde güncelle.');
 
+    // Önce bütün liglerin tarih aralıklarını kontrol et; bir ligde çakışma varsa hiçbirine yazma.
     const plans = [];
     for (const target of targetGroups) {
       const snapshot = await getDocs(collection(db, 'groups', target.id, 'seasons'));
@@ -991,6 +973,7 @@ if (leagueSelect) leagueSelect.addEventListener('change', () => {
   if (code) attachLeague(code);
 });
 
+// app.js anonim oturum ve lig seçimini hazırladıktan sonra ilk grubu bağla.
 const initPoll = setInterval(() => {
   if (uid && $('leagueSelect')?.value && !$('appView')?.classList.contains('hidden')) {
     tryAttachCurrentLeague();
@@ -1002,4 +985,3 @@ window.addEventListener('focus', renderAll);
 setInterval(() => {
   if (groupCode) renderAll();
 }, 30000);
-window.addEventListener('fb-risk-updated', () => renderAll());
