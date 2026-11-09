@@ -179,12 +179,6 @@ function calculateDaily(date) {
     completed, standings, lastPlayers, topPlayers
   };
 }
-  }
-  return {
-    date, matches: dayMatches, pending: dayMatches.filter(match => !hasResult(match)),
-    completed, standings, lastPlayers, topPlayers
-  };
-}
 
 function calculateSeason() {
   const season = getSelectedSeason();
@@ -676,7 +670,7 @@ function renderAll() {
     if (kicker) kicker.textContent = `${formatDay(season.startDate)} – ${formatDay(season.endDate)} · SEZON ÖZELİ`;
     if (tableHeading) tableHeading.textContent = `${season.name} · Puan Tablosu`;
     if (explanation) {
-      explanation.textContent = `Bu tablo yalnızca ${formatDay(season.startDate)} – ${formatDay(season.endDate)} arasındaki maçları sayar. Genel tablo tüm lig maçlarını içerir. Bonus açıkken seçilen maçta doğru skor 6, doğru sonuç 2 puandır.`;
+      explanation.textContent = `Bu tablo yalnızca ${formatDay(season.startDate)} – ${formatDay(season.endDate)} arasındaki maçları sayar. Genel tablo tüm lig maçlarını içerir. Bonus açık ve kapalı sezonlarda hesaplama ayrı tutulur.`;
     }
     if (status) {
       if (seasonResult.complete) {
@@ -735,7 +729,7 @@ async function ensureInitialSeason(code) {
   if (!currentActiveId || !existing.docs.some(item => item.id === currentActiveId)) {
     const sorted = existing.docs
       .map(item => ({ id: item.id, ...item.data() }))
-      .sort((a, b) => b.startDate.localeCompare(a.startDate));
+      .sort((a, b) => b.startDate.localeCompare(b.startDate));
     if (sorted[0]) {
       await updateDoc(groupRef, { activeSeasonId: sorted[0].id, activeSeasonUpdatedAt: serverTimestamp() });
     }
