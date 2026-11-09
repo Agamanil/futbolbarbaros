@@ -147,56 +147,99 @@ function pointsFor(match, prediction, bonusIds) {
   return base * (bonusIds.has(match.id) ? 2 : 1);
 }
 
+// GUNLUK PUAN HESABI - RISK PUAN ENTEGRASYONU
 function calculateDaily(date) {
   const dayMatches = seasonMatches().filter(match => dayKey(match.kickoff) === date);
-  const completed = dayMatches.length > 0 && dayMatches.every(hasResult);
+  const dayMatchIds = new Set(dayMatches.map(match => match.id));
+  const riskReady = window.FUTBOLBARBAROS_RISK_READY === true;
+  const pendingRisks = window.FUTBOLBARBAROS_RISK_PENDING?.(dayMatchIds) || 0;
+  const riskPoints = (userId) => window.FUTBOLBARBAROS_RISK_POINTS?.(userId, dayMatchIds) || 0;
+
+  const completed = dayMatches.length > 0
+    && dayMatches.every(hasResult)
+    && riskReady
+    && pendingRisks === 0;
+
   const bonusIds = selectedMatchIds();
+
   const standings = players.map(person => ({
     id: person.id,
     name: person.name || 'Oyuncu',
     points: dayMatches.reduce((total, match) =>
-      total + pointsFor(match, match.predictions?.[person.id], bonusIds), 0),
+      total + pointsFor(match, match.predictions?.[person.id], bonusIds), 0) + riskPoints(person.id),
     played: dayMatches.filter(hasResult).length
   })).sort((a, b) => b.points - a.points || a.name.localeCompare(b.name, 'tr'));
 
   let lastPlayers = [];
   let topPlayers = [];
+
   if (completed && standings.length) {
     const lowest = Math.min(...standings.map(item => item.points));
     const highest = Math.max(...standings.map(item => item.points));
     lastPlayers = standings.filter(item => item.points === lowest);
     topPlayers = standings.filter(item => item.points === highest);
   }
+
   return {
-    date, matches: dayMatches, pending: dayMatches.filter(match => !hasResult(match)),
-    completed, standings, lastPlayers, topPlayers
+    date,
+    matches: dayMatches,
+    pending: dayMatches.filter(match => !hasResult(match)),
+    completed,
+    standings,
+    lastPlayers,
+    topPlayers
   };
 }
 
+// SEZON PUAN HESABI - RISK PUAN ENTEGRASYONU
 function calculateSeason() {
   const season = getSelectedSeason();
-  if (!season) return { fixtures: [], finished: [], rows: [], complete: false, winners: [], lastPlayers: [] };
+
+  if (!season) {
+    return {
+      fixtures: [],
+      finished: [],
+      rows: [],
+      complete: false,
+      winners: [],
+      lastPlayers: []
+    };
+  }
 
   const fixtures = seasonMatches();
   const finished = fixtures.filter(hasResult);
+  const fixtureIds = new Set(fixtures.map(match => match.id));
+
+  const riskReady = window.FUTBOLBARBAROS_RISK_READY === true;
+  const pendingRisks = window.FUTBOLBARBAROS_RISK_PENDING?.(fixtureIds) || 0;
+  const riskPoints = (userId) => window.FUTBOLBARBAROS_RISK_POINTS?.(userId, fixtureIds) || 0;
+
   const bonusIds = selectedMatchIds();
+
   const rows = players.map(person => ({
     id: person.id,
     name: person.name || 'Oyuncu',
     points: finished.reduce((total, match) =>
-      total + pointsFor(match, match.predictions?.[person.id], bonusIds), 0),
+      total + pointsFor(match, match.predictions?.[person.id], bonusIds), 0) + riskPoints(person.id),
     played: finished.length
   })).sort((a, b) => b.points - a.points || a.name.localeCompare(b.name, 'tr'));
 
-  const complete = dayKey() >= season.endDate && fixtures.length > 0 && finished.length === fixtures.length;
+  const complete = dayKey() >= season.endDate
+    && fixtures.length > 0
+    && finished.length === fixtures.length
+    && riskReady
+    && pendingRisks === 0;
+
   let winners = [];
   let lastPlayers = [];
+
   if (complete && rows.length) {
     const highest = Math.max(...rows.map(row => row.points));
     const lowest = Math.min(...rows.map(row => row.points));
     winners = rows.filter(row => row.points === highest);
     lastPlayers = rows.filter(row => row.points === lowest);
   }
+
   return { fixtures, finished, rows, complete, winners, lastPlayers };
 }
 
@@ -222,6 +265,7 @@ function renderDailySummary() {
   const container = $('dailySummary');
   if (!container) return;
   const season = getSelectedSeason();
+
   if (!season) {
     container.innerHTML = '<p class="season-muted">Görüntülenecek sezon bulunmuyor.</p>';
     return;
@@ -231,6 +275,7 @@ function renderDailySummary() {
     const result = calculateDaily(date);
     let detail = 'Fikstür bekleniyor';
     let state = 'pending';
+
     if (result.matches.length) {
       if (!result.completed) {
         detail = `${result.pending.length} maçın sonucu bekleniyor`;
@@ -241,6 +286,7 @@ function renderDailySummary() {
         state = 'done';
       }
     }
+
     return `<article class="season-day-card ${state}">
       <div class="season-day-date">${formatDay(date)}</div>
       <div class="season-day-count">${result.matches.length} maç</div>
@@ -252,20 +298,25 @@ function renderDailySummary() {
 function renderSeasonLeaderboard(seasonResult) {
   const body = $('seasonLeaderboard');
   if (!body) return;
+
   if (!getSelectedSeason()) {
     body.innerHTML = '<tr><td colspan="4">Henüz sezon oluşturulmamış.</td></tr>';
     return;
   }
+
   if (!players.length) {
     body.innerHTML = '<tr><td colspan="4">Henüz oyuncu bulunmuyor.</td></tr>';
     return;
   }
+
   let previousPoints = null;
   let currentRank = 0;
+
   body.innerHTML = seasonResult.rows.map((person, index) => {
     if (person.points !== previousPoints) currentRank = index + 1;
     previousPoints = person.points;
     const self = person.id === uid ? ' <span class="season-you">(Sen)</span>' : '';
+
     return `<tr>
       <td>${currentRank}</td>
       <td>${safe(person.name)}${self}</td>
@@ -300,28 +351,35 @@ function syncHonorListener() {
   honorListenerKey = nextKey;
   honorMeta = null;
   honorMembers = [];
+
   if (!nextKey) return;
 
   const honorRef = doc(db, 'groups', groupCode, 'seasonHonor', season.id);
+
   unsubHonor = onSnapshot(honorRef, snapshot => {
     honorMeta = snapshot.exists() ? snapshot.data() : null;
+
     if (unsubHonorMembers) {
       unsubHonorMembers();
       unsubHonorMembers = null;
     }
+
     honorMembers = [];
+
     if (snapshot.exists()) {
       unsubHonorMembers = onSnapshot(collection(honorRef, 'members'), memberSnapshot => {
         honorMembers = memberSnapshot.docs.map(item => ({ playerId: item.id, ...item.data() }));
         renderAll();
       }, error => console.error('Onur Köşesi fotoğrafları okunamadı:', error));
     }
+
     renderAll();
   }, error => console.error('Onur Köşesi kaydı okunamadı:', error));
 }
 
 async function ensureHonorSnapshot(seasonResult) {
   const season = getSelectedSeason();
+
   if (!uid || !isAdmin() || !groupCode || !season || !seasonResult.complete ||
       !profilesLoaded || !avatarsLoaded || honorMeta || honorSnapshotCreating) return;
 
@@ -332,6 +390,7 @@ async function ensureHonorSnapshot(seasonResult) {
   const all = new Map();
 
   for (const person of winners) all.set(person.id, { person, roles: ['winner'] });
+
   for (const person of lastPlayers) {
     const existing = all.get(person.id);
     if (existing) existing.roles.push('last');
@@ -340,6 +399,7 @@ async function ensureHonorSnapshot(seasonResult) {
 
   const records = [...all.entries()].map(([playerId, entry]) => {
     const avatar = snapshotAvatarFor(playerId);
+
     return {
       playerId,
       name: entry.person.name || 'Oyuncu',
@@ -354,6 +414,7 @@ async function ensureHonorSnapshot(seasonResult) {
     await runTransaction(db, async transaction => {
       const existing = await transaction.get(honorRef);
       if (existing.exists()) return;
+
       transaction.set(honorRef, {
         seasonId: season.id,
         winnerIds: winners.map(person => person.id),
@@ -362,6 +423,7 @@ async function ensureHonorSnapshot(seasonResult) {
         createdAt: serverTimestamp(),
         createdBy: uid
       });
+
       for (const record of records) {
         transaction.set(doc(honorRef, 'members', record.playerId), record);
       }
@@ -377,6 +439,7 @@ function setHonorAvatar(imageId, textId, record) {
   const image = $(imageId);
   const text = $(textId);
   if (!image || !text) return;
+
   if (record?.avatarDataUrl) {
     image.setAttribute('href', record.avatarDataUrl);
     image.style.display = '';
@@ -393,6 +456,7 @@ function renderHonor(seasonResult) {
   const winnerLabel = $('honorWinnerLabel');
   const lastLabel = $('honorLastLabel');
   const season = getSelectedSeason();
+
   if (!status || !winnerLabel || !lastLabel) return;
 
   if (!season || !seasonResult.complete || !seasonResult.rows.length) {
@@ -420,6 +484,7 @@ function renderHonor(seasonResult) {
   }
 
   const expected = honorMeta.memberIds || [];
+
   if (honorMembers.length < expected.length) {
     setHonorAvatar('winnerHeadImage', 'winnerHeadText', null);
     setHonorAvatar('lastHeadImage', 'lastHeadText', null);
@@ -437,8 +502,10 @@ function renderHonor(seasonResult) {
 
   setHonorAvatar('winnerHeadImage', 'winnerHeadText', winners.find(person => person.avatarDataUrl) || winners[0]);
   setHonorAvatar('lastHeadImage', 'lastHeadText', lastPlayers.find(person => person.avatarDataUrl) || lastPlayers[0]);
+
   if (!winners.some(person => person.avatarDataUrl)) setSvgName('winnerHeadText', winnerInside);
   if (!lastPlayers.some(person => person.avatarDataUrl)) setSvgName('lastHeadText', lastInside);
+
   winnerLabel.textContent = winnerNames.join(' / ') || '?';
   lastLabel.textContent = lastNames.join(' / ') || '?';
   status.textContent = 'SEZON TAMAMLANDI · Fotoğraflar sezon puanları kesinleştiği anda sabitlendi.';
@@ -447,27 +514,33 @@ function renderHonor(seasonResult) {
 function groupedSelections(targetDate) {
   const relevant = seasonSelections().filter(selection => selection.targetDate === targetDate);
   const groups = new Map();
+
   for (const selection of relevant) {
     if (!groups.has(selection.matchId)) groups.set(selection.matchId, []);
     groups.get(selection.matchId).push(selection);
   }
+
   return [...groups.entries()].map(([matchId, entries]) => ({ matchId, entries }));
 }
 
 function renderSelectedBonuses(targetDate) {
   const container = $('seasonSelectedBonuses');
   if (!container) return;
+
   const groups = groupedSelections(targetDate);
+
   if (!groups.length) {
     container.innerHTML = '<p class="season-muted">Bu tarih için henüz bonus maç seçilmedi.</p>';
     return;
   }
+
   container.innerHTML = groups.map(group => {
     const match = seasonMatches().find(item => item.id === group.matchId);
     const first = group.entries[0];
     const home = match?.homeTeam || first.homeTeam || 'Ev sahibi';
     const away = match?.awayTeam || first.awayTeam || 'Deplasman';
     const names = [...new Set(group.entries.map(item => item.playerName || 'Oyuncu'))];
+
     return `<article class="season-bonus-match">
       <div><strong>${safe(home)} - ${safe(away)}</strong>
       <small>${formatDay(targetDate)} · Seçen: ${names.map(safe).join(', ')}</small></div>
@@ -486,17 +559,30 @@ function getTodayContext() {
   const myTodaySelection = selections.find(item => item.uid === uid && item.selectionDay === today);
   const myYesterdaySelection = selections.find(item => item.uid === uid && item.selectionDay === yesterday);
   const isLastPlace = daily.lastPlayers.some(item => item.id === uid);
+
   const nextDayMatches = seasonMatches().filter(match =>
     dayKey(match.kickoff) === tomorrow && !hasResult(match) &&
     toDate(match.kickoff)?.getTime() > Date.now()
   );
-  return { season, today, yesterday, tomorrow, daily, myTodaySelection, myYesterdaySelection, isLastPlace, nextDayMatches };
+
+  return {
+    season,
+    today,
+    yesterday,
+    tomorrow,
+    daily,
+    myTodaySelection,
+    myYesterdaySelection,
+    isLastPlace,
+    nextDayMatches
+  };
 }
 
 function renderBonusControls() {
   const status = $('seasonBonusStatus');
   const choices = $('seasonBonusChoices');
   const season = getSelectedSeason();
+
   if (!status || !choices) return;
   choices.innerHTML = '';
 
@@ -504,53 +590,64 @@ function renderBonusControls() {
     status.textContent = 'Önce bir sezon oluşturulmalı.';
     return;
   }
+
   if (!season.bonusEnabled) {
     status.textContent = 'Bu sezonda günlük bonus sistemi kapalı.';
     return;
   }
 
   const today = dayKey();
+
   if (selectedSeasonId !== activeSeasonId) {
     status.textContent = 'Bonus seçimi yalnızca ligde aktif olan sezonda yapılabilir.';
     return;
   }
+
   if (today < season.startDate) {
     status.textContent = `Sezon ${formatDay(season.startDate)} tarihinde başlayacak. İlk bonus hakkı günlük maçların sonuçları girilince açılacak.`;
     return;
   }
+
   if (today >= season.endDate) {
     status.textContent = 'Sezonun son günündesin veya sezon dönemi sona erdi. Yeni bonus seçimi yapılamaz.';
     return;
   }
 
   const context = getTodayContext();
+
   if (!context.daily.matches.length) {
     status.textContent = 'Bugünün bu sezon için fikstürü henüz eklenmemiş.';
     return;
   }
+
   if (!context.daily.completed) {
     status.textContent = `Bugünün bütün maç sonuçları girilince sonuncular belirlenecek. Bekleyen sonuç: ${context.daily.pending.length}.`;
     return;
   }
+
   if (context.myTodaySelection) {
     status.textContent = `Seçimini yaptın: ${context.myTodaySelection.homeTeam} - ${context.myTodaySelection.awayTeam}. Bugün ikinci seçim yapamazsın.`;
     return;
   }
+
   if (!context.isLastPlace) {
     const names = context.daily.lastPlayers.map(person => person.name).join(', ');
     status.textContent = `Bugünün sonuncuları: ${names || '—'}. Seçim hakkı şu an sende değil.`;
     return;
   }
+
   if (context.myYesterdaySelection) {
     status.textContent = 'Dün bonus maç seçtiğin için bugün yeniden seçim yapamazsın.';
     return;
   }
+
   if (!context.nextDayMatches.length) {
     status.textContent = 'Yarın için henüz seçilebilir maç yok. Fikstür eklendiğinde seçim burada görünecek.';
     return;
   }
 
   status.textContent = 'Sonuncular arasındasın. Yarın oynanacak maçlardan birini seçebilirsin. Seçilen maçta doğru tahmin yapan herkes 2 kat puan alır.';
+
   choices.innerHTML = context.nextDayMatches.map(match => `
     <article class="season-choice-card">
       <div><small>${safe(match.competition || 'FUTBOL')} · ${safe(new Date(toDate(match.kickoff)).toLocaleString('tr-TR', { dateStyle: 'medium', timeStyle: 'short', timeZone: TIME_ZONE }))}</small>
@@ -567,15 +664,18 @@ async function selectBonusMatch(matchId) {
   const context = getTodayContext();
   const match = seasonMatches().find(item => item.id === matchId);
   const season = context.season;
+
   if (!season || !season.bonusEnabled || selectedSeasonId !== activeSeasonId) {
     return alert('Aktif bonus sezonu bulunamadı.');
   }
+
   if (!match) return alert('Maç bulunamadı. Sayfayı yenileyip tekrar dene.');
   if (context.today < season.startDate || context.today >= season.endDate) return alert('Bu tarihte bonus seçimi yapılamaz.');
   if (!context.daily.completed) return alert('Bugünün tüm maç sonuçları girilmeden seçim yapılamaz.');
   if (!context.isLastPlace) return alert('Bu ligde bugünün sonuncuları arasında değilsin.');
   if (context.myTodaySelection) return alert('Bugün zaten seçim yaptın.');
   if (context.myYesterdaySelection) return alert('Dün seçim yaptığın için bugün seçim yapamazsın.');
+
   if (dayKey(match.kickoff) !== context.tomorrow || hasResult(match) || toDate(match.kickoff).getTime() <= Date.now()) {
     return alert('Yalnızca yarın oynanacak ve henüz başlamamış bir maçı seçebilirsin.');
   }
@@ -584,14 +684,20 @@ async function selectBonusMatch(matchId) {
   const selectionRef = doc(db, 'groups', groupCode, 'bonusSelections', selectionId);
   const yesterdayRef = doc(db, 'groups', groupCode, 'bonusSelections', `${context.yesterday}_${uid}`);
   const matchRef = doc(db, 'groups', groupCode, 'matches', matchId);
+
   try {
     const [existing, yesterday, latestMatch] = await Promise.all([
-      getDoc(selectionRef), getDoc(yesterdayRef), getDoc(matchRef)
+      getDoc(selectionRef),
+      getDoc(yesterdayRef),
+      getDoc(matchRef)
     ]);
+
     if (existing.exists()) return alert('Bugün zaten bonus maç seçmişsin.');
     if (yesterday.exists()) return alert('Dün seçim yaptığın için bugün seçim yapamazsın.');
     if (!latestMatch.exists()) return alert('Maç artık bulunamıyor.');
+
     const latest = latestMatch.data();
+
     if (!latest.kickoff || dayKey(latest.kickoff) !== context.tomorrow || hasResult(latest) ||
         toDate(latest.kickoff).getTime() <= Date.now()) {
       return alert('Bu maç için seçim süresi sona ermiş.');
@@ -608,6 +714,7 @@ async function selectBonusMatch(matchId) {
       seasonId: season.id,
       selectedAt: serverTimestamp()
     });
+
     alert(`${latest.homeTeam} - ${latest.awayTeam} bonus maç olarak seçildi.`);
   } catch (error) {
     console.error('Sezon bonus seçimi:', error);
@@ -618,17 +725,21 @@ async function selectBonusMatch(matchId) {
 function renderSeasonAdminList() {
   const container = $('seasonAdminList');
   if (!container) return;
+
   if (!isAdmin()) {
     container.innerHTML = '';
     return;
   }
+
   if (!seasons.length) {
     container.innerHTML = '<p class="season-muted">Bu ligde henüz sezon oluşturulmamış.</p>';
     return;
   }
+
   container.innerHTML = seasons.map(season => {
     const active = season.id === activeSeasonId;
     const state = active ? 'AKTİF' : (dayKey() > season.endDate ? 'ARŞİV' : 'PLANLANDI');
+
     return `<article class="season-admin-row">
       <div class="season-admin-info">
         <strong>${safe(season.name)}</strong>
@@ -644,6 +755,7 @@ function renderSeasonAdminList() {
 
 function renderAll() {
   renderSeasonPicker();
+
   const season = getSelectedSeason();
   const status = $('seasonStatus');
   const kicker = $('seasonKicker');
@@ -654,9 +766,11 @@ function renderAll() {
   if (season) {
     if (kicker) kicker.textContent = `${formatDay(season.startDate)} – ${formatDay(season.endDate)} · SEZON ÖZELİ`;
     if (tableHeading) tableHeading.textContent = `${season.name} · Puan Tablosu`;
+
     if (explanation) {
       explanation.textContent = `Bu tablo yalnızca ${formatDay(season.startDate)} – ${formatDay(season.endDate)} arasındaki maçları sayar. Genel tablo tüm lig maçlarını içerir. Bonus açıkken seçilen maçta doğru skor 6, doğru sonuç 2 puandır.`;
     }
+
     if (status) {
       if (seasonResult.complete) {
         status.textContent = `${season.name} tamamlandı. ${seasonResult.finished.length}/${seasonResult.fixtures.length} maçın sonucu girildi.`;
@@ -688,12 +802,14 @@ function stopListeners() {
   for (const unsubscribe of [unsubGroup, unsubSeasons, unsubMatches, unsubPlayers, unsubBonuses, unsubHonor, unsubHonorMembers]) {
     if (unsubscribe) unsubscribe();
   }
+
   unsubGroup = unsubSeasons = unsubMatches = unsubPlayers = unsubBonuses = unsubHonor = unsubHonorMembers = null;
   honorListenerKey = '';
 }
 
 async function ensureInitialSeason(code) {
   if (!isAdmin()) return;
+
   const seasonCollection = collection(db, 'groups', code, 'seasons');
   const existing = await getDocs(seasonCollection);
   const groupRef = doc(db, 'groups', code);
@@ -702,12 +818,18 @@ async function ensureInitialSeason(code) {
 
   if (existing.empty) {
     const legacyRef = doc(db, 'groups', code, 'seasons', LEGACY_SEASON_ID);
+
     await setDoc(legacyRef, {
       ...LEGACY_SEASON,
       createdAt: serverTimestamp(),
       createdBy: uid
     });
-    await updateDoc(groupRef, { activeSeasonId: LEGACY_SEASON_ID, activeSeasonUpdatedAt: serverTimestamp() });
+
+    await updateDoc(groupRef, {
+      activeSeasonId: LEGACY_SEASON_ID,
+      activeSeasonUpdatedAt: serverTimestamp()
+    });
+
     return;
   }
 
@@ -715,14 +837,19 @@ async function ensureInitialSeason(code) {
     const sorted = existing.docs
       .map(item => ({ id: item.id, ...item.data() }))
       .sort((a, b) => b.startDate.localeCompare(a.startDate));
+
     if (sorted[0]) {
-      await updateDoc(groupRef, { activeSeasonId: sorted[0].id, activeSeasonUpdatedAt: serverTimestamp() });
+      await updateDoc(groupRef, {
+        activeSeasonId: sorted[0].id,
+        activeSeasonUpdatedAt: serverTimestamp()
+      });
     }
   }
 }
 
 async function attachLeague(code) {
   if (!uid || !code || (code === groupCode && (unsubGroup || startingGroup)) || startingGroup) return;
+
   startingGroup = true;
   stopListeners();
   groupCode = code;
@@ -740,10 +867,12 @@ async function attachLeague(code) {
 
   try {
     const playerSnap = await getDoc(doc(db, 'groups', code, 'players', uid));
+
     if (!playerSnap.exists()) {
       groupCode = '';
       return;
     }
+
     player = { ...playerSnap.data(), uid };
     await ensureInitialSeason(code);
 
@@ -757,11 +886,13 @@ async function attachLeague(code) {
       seasons = snapshot.docs.map(item => ({ id: item.id, ...item.data() }))
         .filter(item => item.startDate && item.endDate)
         .sort((a, b) => a.startDate.localeCompare(b.startDate));
+
       if (!seasons.some(item => item.id === selectedSeasonId)) {
         selectedSeasonId = seasons.some(item => item.id === activeSeasonId)
           ? activeSeasonId
           : (seasons[0]?.id || '');
       }
+
       renderAll();
     }, error => console.error('Sezon listesi okunamadı:', error));
 
@@ -796,7 +927,9 @@ async function attachLeague(code) {
 function tryAttachCurrentLeague() {
   const select = $('leagueSelect');
   const appView = $('appView');
+
   if (!uid || !select || !select.value || !appView || appView.classList.contains('hidden')) return;
+
   attachLeague(select.value);
 }
 
@@ -809,7 +942,9 @@ $('seasonViewSelect')?.addEventListener('change', event => {
 // Yönetici seçili lig için yeni sezon açar. Tarih aralıkları çakışamaz.
 $('seasonCreateForm')?.addEventListener('submit', async event => {
   event.preventDefault();
+
   const status = $('seasonAdminMessage');
+
   if (!isAdmin()) return messageSeason(status, 'Yönetici yetkisi yok.');
   if (!groupCode) return messageSeason(status, 'Önce bir lig seç.');
 
@@ -819,50 +954,65 @@ $('seasonCreateForm')?.addEventListener('submit', async event => {
   const bonusEnabled = Boolean($('newSeasonBonus')?.checked);
 
   if (name.length < 2 || name.length > 40) return messageSeason(status, 'Sezon adı 2–40 karakter arasında olmalı.');
+
   if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate) || !/^\d{4}-\d{2}-\d{2}$/.test(endDate)) {
     return messageSeason(status, 'Başlangıç ve bitiş tarihlerini seç.');
   }
+
   if (endDate < startDate) return messageSeason(status, 'Bitiş tarihi başlangıç tarihinden önce olamaz.');
+
   const durationDays = seasonDays(startDate, endDate).length;
+
   if (durationDays > MAX_SEASON_DAYS) return messageSeason(status, `Bir sezon en fazla ${MAX_SEASON_DAYS} gün olabilir.`);
   if (bonusEnabled && durationDays < 2) return messageSeason(status, 'Günlük bonus için sezon en az 2 gün sürmeli.');
 
   const overlap = seasons.find(item => startDate <= item.endDate && endDate >= item.startDate);
+
   if (overlap) return messageSeason(status, `Tarih aralığı “${overlap.name}” sezonuyla çakışıyor. Sezon tarihleri ayrı olmalı.`);
 
   const seasonId = `${startDate}_${endDate}`;
   const scope = $('seasonTargetScope')?.value || 'current';
   const button = event.target.querySelector('button[type="submit"]');
+
   if (button) button.disabled = true;
+
   try {
     let targetGroups = [{ id: groupCode, name: groupData.name || groupCode }];
+
     if (scope === 'all') {
       const groupSnapshot = await getDocs(collection(db, 'groups'));
       targetGroups = groupSnapshot.docs.map(item => ({ id: item.id, name: item.data().name || item.id }));
     }
+
     if (!targetGroups.length) throw new Error('İşlem yapılacak lig bulunamadı.');
     if (targetGroups.length * 3 > 450) throw new Error('Toplu işlem güvenli işlem sınırını aşıyor. Ligleri daha küçük gruplar hâlinde güncelle.');
 
     // Önce bütün liglerin tarih aralıklarını kontrol et; bir ligde çakışma varsa hiçbirine yazma.
     const plans = [];
+
     for (const target of targetGroups) {
       const snapshot = await getDocs(collection(db, 'groups', target.id, 'seasons'));
       const targetSeasons = snapshot.docs.map(item => ({ id: item.id, ...item.data() }));
       const baseline = snapshot.empty ? [{ ...LEGACY_SEASON, id: LEGACY_SEASON_ID }] : targetSeasons;
       const overlapInTarget = baseline.find(item => startDate <= item.endDate && endDate >= item.startDate);
+
       if (overlapInTarget) {
         throw new Error(`${target.name} liginde tarih aralığı “${overlapInTarget.name}” sezonuyla çakışıyor. Hiçbir lige yeni kayıt yazılmadı.`);
       }
+
       if (targetSeasons.some(item => item.id === seasonId)) {
         throw new Error(`${target.name} liginde bu sezon zaten bulunuyor. Hiçbir lige yeni kayıt yazılmadı.`);
       }
+
       plans.push({ ...target, needsBaseline: snapshot.empty });
     }
 
     const batch = writeBatch(db);
     const createdAt = serverTimestamp();
+
     for (const target of plans) {
       const seasonsPath = collection(db, 'groups', target.id, 'seasons');
+
       if (target.needsBaseline) {
         batch.set(doc(seasonsPath, LEGACY_SEASON_ID), {
           ...LEGACY_SEASON,
@@ -870,6 +1020,7 @@ $('seasonCreateForm')?.addEventListener('submit', async event => {
           createdBy: uid
         });
       }
+
       batch.set(doc(seasonsPath, seasonId), {
         seasonId,
         name,
@@ -879,17 +1030,22 @@ $('seasonCreateForm')?.addEventListener('submit', async event => {
         createdAt,
         createdBy: uid
       });
+
       batch.update(doc(db, 'groups', target.id), {
         activeSeasonId: seasonId,
         activeSeasonUpdatedAt: createdAt
       });
     }
+
     await batch.commit();
 
     selectedSeasonId = seasonId;
     event.target.reset();
+
     if ($('newSeasonBonus')) $('newSeasonBonus').checked = true;
+
     const targetText = scope === 'all' ? `${plans.length} mevcut ligde` : `${groupCode} liginde`;
+
     messageSeason(status, `${name} ${targetText} oluşturuldu ve aktif edildi. Eski sezon kayıtları korundu.`, false);
     renderAll();
   } catch (error) {
@@ -909,21 +1065,28 @@ function messageSeason(element, text, isError = true) {
 $('seasonAdminList')?.addEventListener('click', async event => {
   const viewButton = event.target.closest('[data-view-season]');
   const activateButton = event.target.closest('[data-activate-season]');
+
   if (viewButton) {
     selectedSeasonId = viewButton.dataset.viewSeason;
     renderAll();
     return;
   }
+
   if (!activateButton) return;
   if (!isAdmin()) return alert('Yönetici yetkisi yok.');
+
   const seasonId = activateButton.dataset.activateSeason;
+
   if (!seasons.some(item => item.id === seasonId)) return alert('Sezon bulunamadı.');
+
   activateButton.disabled = true;
+
   try {
     await updateDoc(doc(db, 'groups', groupCode), {
       activeSeasonId: seasonId,
       activeSeasonUpdatedAt: serverTimestamp()
     });
+
     selectedSeasonId = seasonId;
     messageSeason($('seasonAdminMessage'), 'Sezon aktif hâle getirildi.', false);
     renderAll();
@@ -938,11 +1101,13 @@ $('seasonAdminList')?.addEventListener('click', async event => {
 onAuthStateChanged(auth, user => {
   if (unsubProfiles) unsubProfiles();
   if (unsubAvatars) unsubAvatars();
+
   profilesLoaded = false;
   avatarsLoaded = false;
   userProfiles = {};
   avatarGallery = [];
   uid = user?.uid || null;
+
   if (!uid) {
     stopListeners();
     groupCode = '';
@@ -964,14 +1129,18 @@ onAuthStateChanged(auth, user => {
     avatarsLoaded = true;
     renderAll();
   }, error => console.error('Avatar galerisi okunamadı:', error));
+
   tryAttachCurrentLeague();
 });
 
 const leagueSelect = $('leagueSelect');
-if (leagueSelect) leagueSelect.addEventListener('change', () => {
-  const code = leagueSelect.value;
-  if (code) attachLeague(code);
-});
+
+if (leagueSelect) {
+  leagueSelect.addEventListener('change', () => {
+    const code = leagueSelect.value;
+    if (code) attachLeague(code);
+  });
+}
 
 // app.js anonim oturum ve lig seçimini hazırladıktan sonra ilk grubu bağla.
 const initPoll = setInterval(() => {
@@ -982,6 +1151,10 @@ const initPoll = setInterval(() => {
 }, 500);
 
 window.addEventListener('focus', renderAll);
+
 setInterval(() => {
   if (groupCode) renderAll();
 }, 30000);
+
+// Risk sistemi güncellendiğinde günlük ve sezon tablolarını yeniden çiz.
+window.addEventListener('fb-risk-updated', () => renderAll());
