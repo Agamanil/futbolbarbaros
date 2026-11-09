@@ -808,7 +808,7 @@ function renderMatches() {
       othersHtml = '<div class="others-predictions-warning" style="margin-top:8px;font-size:.8rem;color:#f59e0b;background:rgba(245,158,11,.1);padding:6px;border-radius:4px;">Tahminini kaydettikten sonra diğer kullanıcıların tahminlerini görebilirsin.</div>';
     }
 
-    return `<article class="match-card">
+    return `<article class="match-card" data-match-id="${safe(m.id)}">
       <div>
         <div class="match-meta">${safe(m.competition || 'FUTBOL')} · ${dateText(m.kickoff)} ${bonusIds.has(m.id) ? '<span style="display:inline-block;margin-left:6px;padding:3px 7px;border-radius:5px;background:rgba(245,158,11,.18);color:#fbbf24;font-weight:800;">⭐ BONUS 2X</span>' : ''}</div>
         <div class="teams"><span>${safe(m.homeTeam)}</span><span class="vs">VS</span><span>${safe(m.awayTeam)}</span></div>
@@ -969,18 +969,25 @@ $('matchForm').addEventListener('submit', async e => {
   }
 });
 
-function renderAdminMatches() {
-  const el = $('adminMatches');
-  if (!el) return;
+function calculateStandings() {
+  const finished = matches.filter(hasResult);
+  const bonusIds = bonusMatchIds();
+  const allMatchIds = new Set(matches.map(match => match.id));
 
-  if (!matches.length) {
-    el.innerHTML = '<div class="empty">Henüz maç yok.</div>';
-    return;
+  return players.map(p => ({
+    ...p,
+    pts: finished.reduce(
+      (sum, m) => sum + pointsFor(m, m.predictions?.[p.id], bonusIds),
+      0
+    ) + (window.FUTBOLBARBAROS_RISK_POINTS?.(p.id, allMatchIds) || 0),
+    played: finished.length
+  })).sort((a, b) => b.pts - a.pts || a.name.localeCompare(b.name, 'tr'));
+  
   }
 
   const bonusIds = bonusMatchIds();
 
-  el.innerHTML = matches.map(m => `<article class="match-card admin-match-card">
+  el.innerHTML = matches.map(m => `<article class="match-card admin-match-card" data-admin-match-id="${safe(m.id)}">
     <label class="copy-match-check">
       <input type="checkbox" data-copy-match="${safe(m.id)}">
       Bu maçı kopyala
@@ -1872,4 +1879,8 @@ setInterval(() => {
 boot().catch(err => {
   console.error(err);
   message($('entryMessage'), 'HATA: ' + (err.code || err.message || 'Bilinmeyen hata'));
+  window.addEventListener('fb-risk-updated', () => {
+  renderTable();
+  renderMatches();
+});
 });
