@@ -174,9 +174,15 @@ function calculateDaily(date) {
     lastPlayers = standings.filter(item => item.points === lowest);
     topPlayers = standings.filter(item => item.points === highest);
   }
+
   return {
-    date, matches: dayMatches, pending: dayMatches.filter(match => !hasResult(match)),
-    completed, standings, lastPlayers, topPlayers
+    date,
+    matches: dayMatches,
+    pending: dayMatches.filter(match => !hasResult(match)),
+    completed,
+    standings,
+    lastPlayers,
+    topPlayers
   };
 }
 
@@ -670,7 +676,7 @@ function renderAll() {
     if (kicker) kicker.textContent = `${formatDay(season.startDate)} – ${formatDay(season.endDate)} · SEZON ÖZELİ`;
     if (tableHeading) tableHeading.textContent = `${season.name} · Puan Tablosu`;
     if (explanation) {
-      explanation.textContent = `Bu tablo yalnızca ${formatDay(season.startDate)} – ${formatDay(season.endDate)} arasındaki maçları sayar. Genel tablo tüm lig maçlarını içerir. Bonus açık ve kapalı sezonlarda hesaplama ayrı tutulur.`;
+      explanation.textContent = `Bu tablo yalnızca ${formatDay(season.startDate)} – ${formatDay(season.endDate)} arasındaki maçları sayar. Genel tablo tüm lig maçlarını içerir.`;
     }
     if (status) {
       if (seasonResult.complete) {
@@ -729,7 +735,7 @@ async function ensureInitialSeason(code) {
   if (!currentActiveId || !existing.docs.some(item => item.id === currentActiveId)) {
     const sorted = existing.docs
       .map(item => ({ id: item.id, ...item.data() }))
-      .sort((a, b) => b.startDate.localeCompare(b.startDate));
+      .sort((a, b) => b.startDate.localeCompare(a.startDate));
     if (sorted[0]) {
       await updateDoc(groupRef, { activeSeasonId: sorted[0].id, activeSeasonUpdatedAt: serverTimestamp() });
     }
@@ -815,13 +821,11 @@ function tryAttachCurrentLeague() {
   attachLeague(select.value);
 }
 
-// Sezon görüntüleme seçimi: yalnızca bu cihazdaki görünümü değiştirir.
 $('seasonViewSelect')?.addEventListener('change', event => {
   selectedSeasonId = event.target.value || '';
   renderAll();
 });
 
-// Yönetici seçili lig için yeni sezon açar. Tarih aralıkları çakışamaz.
 $('seasonCreateForm')?.addEventListener('submit', async event => {
   event.preventDefault();
   const status = $('seasonAdminMessage');
@@ -858,7 +862,6 @@ $('seasonCreateForm')?.addEventListener('submit', async event => {
     if (!targetGroups.length) throw new Error('İşlem yapılacak lig bulunamadı.');
     if (targetGroups.length * 3 > 450) throw new Error('Toplu işlem güvenli işlem sınırını aşıyor. Ligleri daha küçük gruplar hâlinde güncelle.');
 
-    // Önce bütün liglerin tarih aralıklarını kontrol et; bir ligde çakışma varsa hiçbirine yazma.
     const plans = [];
     for (const target of targetGroups) {
       const snapshot = await getDocs(collection(db, 'groups', target.id, 'seasons'));
@@ -988,7 +991,6 @@ if (leagueSelect) leagueSelect.addEventListener('change', () => {
   if (code) attachLeague(code);
 });
 
-// app.js anonim oturum ve lig seçimini hazırladıktan sonra ilk grubu bağla.
 const initPoll = setInterval(() => {
   if (uid && $('leagueSelect')?.value && !$('appView')?.classList.contains('hidden')) {
     tryAttachCurrentLeague();
