@@ -41,6 +41,69 @@ function parseScore(value) {
   return Number.isInteger(number) && number >= 0 ? number : null;
 }
 
+function extractKeyEvents(competitions, data, home, away) {
+  const detailLists = [
+    ...competitions.map(item => item?.details),
+    data?.keyEvents,
+    data?.keyevents,
+    ...(Array.isArray(data?.events)
+      ? data.events.flatMap(item => (item?.competitions || []).map(comp => comp?.details))
+      : [])
+  ].filter(Array.isArray);
+
+  // ESPN'in summary yanıtında olaylar competition.details altında gelir.
+  // Birden fazla kopya varsa en dolu listeyi kullan.
+  const details = detailLists.sort((a, b) => b.length - a.length)[0] || [];
+  const homeId = String(home?.team?.id || home?.id || '');
+  const awayId = String(away?.team?.id || away?.id || '');
+  const events = [];
+  const seen = new Set();
+
+  for (const detail of details) {
+    if (!detail || detail.shootout === true) continue;
+
+    const typeId = String(detail.type?.id || '');
+    const typeText = normalize(detail.type?.text || '');
+    const isSecondYellow = typeText.includes('second yellow') || typeText.includes('second caution');
+    const isRedCard = detail.redCard === true || typeId === '95'
+      || typeText.includes('red card') || isSecondYellow;
+    const isGoal = detail.scoringPlay === true
+      || ['70', '71', '72'].includes(typeId)
+      || typeText.includes('goal');
+
+    if (!isRedCard && !isGoal) continue;
+
+    const kind = isRedCard
+      ? 'redCard'
+      : detail.ownGoal
+        ? 'ownGoal'
+        : detail.penaltyKick
+          ? 'penaltyGoal'
+          : 'goal';
+
+    const athlete = Array.isArray(detail.athletesInvolved) ? detail.athletesInvolved[0] : null;
+    const player = String(athlete?.displayName || athlete?.fullName || athlete?.shortName || '');
+    const minute = String(
+      detail.clock?.displayValue || detail.time?.displayValue || detail.displayClock || ''
+    );
+    const teamId = String(detail.team?.id || detail.teamId || '');
+    const side = teamId && teamId === homeId
+      ? 'home'
+      : teamId && teamId === awayId
+        ? 'away'
+        : null;
+    const teamName = String(detail.team?.displayName || detail.team?.name || '');
+    const key = String(detail.id || [kind, minute, player, teamId || teamName].join('|'));
+
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    events.push({ key, kind, minute, player, side, teamId, teamName });
+  }
+
+  return events;
+}
+
 function extractMatch(data, expectedId) {
   const header = data?.header || {};
   const headerId = String(header.id || data?.id || data?.event?.id || '');
@@ -71,7 +134,8 @@ function extractMatch(data, expectedId) {
     clock: String(status.displayClock || type.displayClock || ''),
     period: Number(status.period || 0) || null,
     homeScore: parseScore(home.score),
-    awayScore: parseScore(away.score)
+    awayScore: parseScore(away.score),
+    keyEvents: extractKeyEvents(competitions, data, home, away)
   };
 }
 
@@ -122,6 +186,11 @@ async function updateMatch(ref, current, event) {
     espnPeriod: event.period,
     espnUpdatedAt: admin.firestore.FieldValue.serverTimestamp()
   };
+
+  if (Array.isArray(event.keyEvents) && event.keyEvents.length > 0) {
+    update.espnKeyEvents = event.keyEvents;
+    update.espnKeyEventsUpdatedAt = admin.firestore.FieldValue.serverTimestamp();
+  }
 
   if (event.state === 'in' && event.homeScore !== null && event.awayScore !== null) {
     update.liveHomeScore = event.homeScore;
