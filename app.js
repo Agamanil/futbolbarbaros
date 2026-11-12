@@ -203,8 +203,12 @@ function liveScoreMarkup(m) {
 function isTurkeyTeamName(name) {
   const normalized = String(name || '')
     .toLocaleLowerCase('tr-TR')
-    .normalize('NFD')
-    .replace(/[\\u0300-\\u036f]/g, '')
+    .replace(/ü/g, 'u')
+    .replace(/ı/g, 'i')
+    .replace(/ş/g, 's')
+    .replace(/ö/g, 'o')
+    .replace(/ç/g, 'c')
+    .replace(/ğ/g, 'g')
     .replace(/[^a-z0-9]/g, '');
 
   return normalized.includes('turkiye') || normalized.includes('turkey');
