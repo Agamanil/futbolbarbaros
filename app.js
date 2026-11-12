@@ -238,7 +238,7 @@ function matchEventsMarkup(m) {
     return `<li class="match-event${isRedCard ? ' match-event-red-card' : ''}">
       <span class="match-event-icon" aria-hidden="true">${icon}</span>
       ${minute}
-      <span class="match-event-player">${safe(event.player || 'Oyuncu adı bulunamadı')}${note}</span>
+      <span class="match-event-player">${safe(event.player || (isRedCard ? 'Kırmızı kart' : 'Gol'))}${note}</span>
     </li>`;
   }).join('');
 
