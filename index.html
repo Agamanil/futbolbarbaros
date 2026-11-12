@@ -326,6 +326,18 @@
       <div class="section-header">
         <h3>Yönetici Paneli</h3>
       </div>
+      <section class="card admin-card" id="manualBonusAdminCard">
+        <h4>Sonuncu Yerine Bonus Maç Seç</h4>
+        <p class="match-meta">Sonuncu oyuncu hesabına erişemiyorsa, bugünün sonuçları kesinleştikten sonra yarının bonus maçını yönetici olarak seçebilirsin. Bu işlem oyuncuların art arda seçim yapma kuralını değiştirmez.</p>
+        <label for="manualBonusMatchSelect">Yarının bonus maçı
+          <select id="manualBonusMatchSelect" disabled>
+            <option value="">Maçlar yükleniyor...</option>
+          </select>
+        </label>
+        <button type="button" id="manualBonusSelectBtn" class="primary-btn" disabled>Yönetici olarak bonus seç</button>
+        <div id="manualBonusAdminStatus" class="message" aria-live="polite"></div>
+      </section>
+
 
       <section class="card admin-card" id="moderationAdminCard">
         <h4>Oyuncu Yönetimi</h4>
