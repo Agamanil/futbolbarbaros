@@ -200,6 +200,49 @@ function liveScoreMarkup(m) {
   return '';
 }
 
+function isTurkeyTeamName(name) {
+  const normalized = String(name || '')
+    .toLocaleLowerCase('tr-TR')
+    .normalize('NFD')
+    .replace(/[\\u0300-\\u036f]/g, '')
+    .replace(/[^a-z0-9]/g, '');
+
+  return normalized.includes('turkiye') || normalized.includes('turkey');
+}
+
+function matchEventsMarkup(m) {
+  const events = Array.isArray(m.espnKeyEvents) ? m.espnKeyEvents : [];
+  if (!events.length) return '';
+
+  const rows = events.map(event => {
+    const isRedCard = event.kind === 'redCard';
+    const teamName = event.side === 'home'
+      ? m.homeTeam
+      : event.side === 'away'
+        ? m.awayTeam
+        : event.teamName;
+    const icon = isRedCard ? '🟥' : (isTurkeyTeamName(teamName) ? '🇹🇷' : '⚽');
+    const minute = event.minute
+      ? `<span class="match-event-minute">${safe(event.minute)}</span>`
+      : '';
+    const note = event.kind === 'ownGoal'
+      ? ' <small class="match-event-note">KK</small>'
+      : event.kind === 'penaltyGoal'
+        ? ' <small class="match-event-note">P</small>'
+        : '';
+
+    return `<li class="match-event${isRedCard ? ' match-event-red-card' : ''}">
+      <span class="match-event-icon" aria-hidden="true">${icon}</span>
+      ${minute}
+      <span class="match-event-player">${safe(event.player || 'Oyuncu adı bulunamadı')}${note}</span>
+    </li>`;
+  }).join('');
+
+  return `<div class="match-events" aria-label="Gol ve kırmızı kart olayları">
+    <ul class="match-events-list">${rows}</ul>
+  </div>`;
+}
+
 function predictionFor(m) {
   return m.predictions?.[uid];
 }
@@ -814,6 +857,7 @@ function renderMatches() {
         <div class="teams"><span>${safe(m.homeTeam)}</span><span class="vs">VS</span><span>${safe(m.awayTeam)}</span></div>
         <div class="match-meta">${safe(predictionStatus(m))}</div>
         ${liveScoreMarkup(m)}
+        ${matchEventsMarkup(m)}
       </div>
       <div class="match-actions">
         <div class="prediction-label">
