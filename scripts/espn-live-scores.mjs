@@ -146,6 +146,17 @@ function extractKeyEvents(competition, data, home, away) {
           : 'goal';
 
     const player = extractPlayerName(detail);
+    if (!player) {
+      console.log('[ESPN OYUNCU ALANI]', JSON.stringify({
+        eventKeys: Object.keys(detail),
+        athletesInvolved: detail.athletesInvolved ?? null,
+        athlete: detail.athlete ?? null,
+        player: detail.player ?? null,
+        text: detail.text ?? null,
+        shortText: detail.shortText ?? null,
+        description: detail.description ?? null
+      }).slice(0, 900));
+    }
     const minuteValue = detail.clock?.displayValue
       || detail.time?.displayValue
       || detail.displayClock
@@ -387,6 +398,13 @@ async function main() {
       console.log(
         `${groupDoc.id} | ${match.homeTeam || '?'} ${event.homeScore}-${event.awayScore} ${match.awayTeam || '?'} | ${event.state}${event.completed ? ' FINAL' : ''} | ESPN ${match.espnId}`
       );
+      if (event.keyEvents?.length) {
+        console.log(
+          `OLAYLAR ESPN ${match.espnId}: ${event.keyEvents.map(item =>
+            `${item.kind} ${item.minute} ${item.player || '[isim yok]'}`
+          ).join(' | ')}`
+        );
+      }
     }
   }
 
