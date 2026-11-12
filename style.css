@@ -667,3 +667,62 @@ select option {
     flex: 1;
   }
 }
+
+
+/* GOL VE KIRMIZI KART OLAYLARI */
+
+.match-events {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.match-events-list {
+  display: grid;
+  gap: 7px;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.match-event {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--text);
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.match-event-icon {
+  display: inline-flex;
+  width: 23px;
+  flex: 0 0 23px;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+}
+
+.match-event-minute {
+  min-width: 42px;
+  color: var(--muted);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.match-event-player {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.match-event-red-card .match-event-player {
+  color: #ffb4b4;
+}
+
+.match-event-note {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  margin-left: 3px;
+}
