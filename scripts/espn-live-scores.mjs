@@ -74,23 +74,24 @@ function extractPlayerName(detail) {
     }
   }
 
-  // Bazı ESPN maçlarında oyuncu adı olay metnine yazılır.
+  // ESPN bazen oyuncuyu yalnızca olay metninde verir: "Arda Güler Goal".
   const textCandidates = [
     detail?.text,
     detail?.shortText,
     detail?.description,
     detail?.headline,
+    detail?.type?.text,
     detail?.commentary?.text
   ];
 
   for (const value of textCandidates) {
     if (typeof value !== 'string' || !value.trim()) continue;
 
-    let name = value.trim()
-      .replace(/\\s*[-–|:]?\\s*(?:goal(?:\\s*[-–:].*)?|red card|second yellow card|yellow card|penalty scored|own goal)\\s*$/i, '')
-      .replace(/^\\s*(?:goal|red card|second yellow card|yellow card)\\s*[-–:]?\\s*/i, '')
-      .replace(/\\s+scores?\\s+(?:a\\s+)?goal.*$/i, '')
-      .replace(/\\s+shown (?:a )?red card.*$/i, '')
+    const name = value.trim()
+      .replace(/\s*[-–|:]?\s*(?:goal(?:\s*[-–:].*)?|red card|second yellow card|yellow card|penalty scored|own goal)\s*$/i, '')
+      .replace(/^\s*(?:goal|red card|second yellow card|yellow card)\s*[-–:]?\s*/i, '')
+      .replace(/\s+scores?\s+(?:a\s+)?goal.*$/i, '')
+      .replace(/\s+shown (?:a )?red card.*$/i, '')
       .trim();
 
     if (name && !/^(goal|red card|yellow card|own goal)$/i.test(name)) {
@@ -100,23 +101,27 @@ function extractPlayerName(detail) {
 
   return '';
 }
-
 function extractKeyEvents(competition, data, home, away) {
-  const detailLists = [
-    competition?.details,
+  // Aynı maça ait header/data/events bölümleri aynı olayları tekrarlayabilir.
+  // Önce en dolu tek details listesini seçiyoruz; listeleri üst üste eklemiyoruz.
+  const fallbackLists = [
     data?.keyEvents,
     data?.keyevents,
     ...(Array.isArray(data?.events)
       ? data.events.flatMap(item => (item?.competitions || []).map(comp => comp?.details))
       : [])
-  ].filter(Array.isArray);
+  ].filter(list => Array.isArray(list) && list.length > 0);
+
+  const details = Array.isArray(competition?.details) && competition.details.length
+    ? competition.details
+    : fallbackLists.sort((a, b) => b.length - a.length)[0] || [];
 
   const homeId = String(home?.team?.id || home?.id || '');
   const awayId = String(away?.team?.id || away?.id || '');
   const events = [];
   const baseIndexes = new Map();
 
-  for (const detail of detailLists.flat()) {
+  for (const detail of details) {
     if (!detail || detail.shootout === true) continue;
 
     const typeId = String(detail.type?.id || detail.typeId || '');
@@ -157,20 +162,16 @@ function extractKeyEvents(competition, data, home, away) {
     const teamName = String(detail.team?.displayName || detail.team?.name || '');
     const teamKey = teamId || side || normalize(teamName) || 'unknown';
     const baseKey = [kind, minute, teamKey].join('|');
-    const normalizedPlayer = normalize(player);
 
     if (baseIndexes.has(baseKey)) {
-      const existingIndex = baseIndexes.get(baseKey);
-      const existing = events[existingIndex];
+      const existing = events[baseIndexes.get(baseKey)];
 
-      // Aynı olay ESPN'in birden fazla alanında gelirse tek satır tut;
-      // oyuncu adı dolu gelen kopyayı tercih et.
+      // Bir kopyada oyuncu adı yoksa aynı olayın isimli kopyasıyla tamamla.
       if (!existing.player && player) {
         existing.player = player;
-        existing.key = [baseKey, normalizedPlayer].join('|');
-      } else if (player && normalize(existing.player) !== normalizedPlayer) {
-        // Aynı takımın aynı dakikada birden fazla olayı varsa ikisini koru.
-        const playerKey = [baseKey, normalizedPlayer].join('|');
+        existing.key = [baseKey, normalize(player)].join('|');
+      } else if (player && normalize(existing.player) !== normalize(player)) {
+        const playerKey = [baseKey, normalize(player)].join('|');
         if (!events.some(item => item.key === playerKey)) {
           events.push({ key: playerKey, kind, minute, player, side, teamId, teamName });
         }
@@ -180,7 +181,7 @@ function extractKeyEvents(competition, data, home, away) {
 
     baseIndexes.set(baseKey, events.length);
     events.push({
-      key: [baseKey, normalizedPlayer].join('|'),
+      key: [baseKey, normalize(player)].join('|'),
       kind,
       minute,
       player,
@@ -215,6 +216,10 @@ function extractMatch(data, expectedId) {
   const away = competitors.find(team => team.homeAway === 'away');
   if (!home || !away) return null;
 
+  const eventCompetition = competitions.find(item =>
+    Array.isArray(item?.details) && item.details.length > 0
+  ) || competition;
+
   return {
     state: String(type.state || status.state || '').toLowerCase(),
     completed: type.completed === true,
@@ -223,7 +228,7 @@ function extractMatch(data, expectedId) {
     period: Number(status.period || 0) || null,
     homeScore: parseScore(home.score),
     awayScore: parseScore(away.score),
-    keyEvents: extractKeyEvents(competition, data, home, away)
+    keyEvents: extractKeyEvents(eventCompetition, data, home, away)
   };
 }
 
