@@ -41,9 +41,69 @@ function parseScore(value) {
   return Number.isInteger(number) && number >= 0 ? number : null;
 }
 
-function extractKeyEvents(competitions, data, home, away) {
+function extractPlayerName(detail) {
+  const sources = [
+    detail?.athletesInvolved,
+    detail?.athletes,
+    detail?.participants,
+    detail?.players,
+    detail?.athlete,
+    detail?.player
+  ];
+
+  for (const source of sources) {
+    const candidate = Array.isArray(source) ? source[0] : source;
+    if (!candidate) continue;
+
+    if (typeof candidate === 'string' && candidate.trim()) {
+      return candidate.trim();
+    }
+
+    if (typeof candidate === 'object') {
+      const nested = candidate.athlete || candidate.player || candidate.person;
+      const name = candidate.displayName
+        || candidate.fullName
+        || candidate.name
+        || candidate.shortName
+        || candidate.athleteName
+        || nested?.displayName
+        || nested?.fullName
+        || nested?.name;
+
+      if (name) return String(name).trim();
+    }
+  }
+
+  // Bazı ESPN maçlarında oyuncu adı olay metnine yazılır.
+  const textCandidates = [
+    detail?.text,
+    detail?.shortText,
+    detail?.description,
+    detail?.headline,
+    detail?.commentary?.text
+  ];
+
+  for (const value of textCandidates) {
+    if (typeof value !== 'string' || !value.trim()) continue;
+
+    let name = value.trim()
+      .replace(/\\s*[-–|:]?\\s*(?:goal(?:\\s*[-–:].*)?|red card|second yellow card|yellow card|penalty scored|own goal)\\s*$/i, '')
+      .replace(/^\\s*(?:goal|red card|second yellow card|yellow card)\\s*[-–:]?\\s*/i, '')
+      .replace(/\\s+scores?\\s+(?:a\\s+)?goal.*$/i, '')
+      .replace(/\\s+shown (?:a )?red card.*$/i, '')
+      .trim();
+
+    if (name && !/^(goal|red card|yellow card|own goal)$/i.test(name)) {
+      return name;
+    }
+  }
+
+  return '';
+}
+
+function extractKeyEvents(competition, data, home, away) {
   const detailLists = [
-    ...competitions.map(item => item?.details),
+    competition?.details,
     data?.keyEvents,
     data?.keyevents,
     ...(Array.isArray(data?.events)
@@ -51,25 +111,24 @@ function extractKeyEvents(competitions, data, home, away) {
       : [])
   ].filter(Array.isArray);
 
-  // Summary farklı bölümlerde aynı olayı tekrarlayabilir.
-  // Tüm listeleri birleştirip aşağıda kararlı anahtarla tekilleştiriyoruz.
-  const details = detailLists.flat();
   const homeId = String(home?.team?.id || home?.id || '');
   const awayId = String(away?.team?.id || away?.id || '');
   const events = [];
-  const seen = new Set();
+  const baseIndexes = new Map();
 
-  for (const detail of details) {
+  for (const detail of detailLists.flat()) {
     if (!detail || detail.shootout === true) continue;
 
-    const typeId = String(detail.type?.id || '');
-    const typeText = normalize(detail.type?.text || '');
+    const typeId = String(detail.type?.id || detail.typeId || '');
+    const typeText = normalize(detail.type?.text || detail.typeText || '');
     const isSecondYellow = typeText.includes('second yellow') || typeText.includes('second caution');
     const isRedCard = detail.redCard === true || typeId === '95'
       || typeText.includes('red card') || isSecondYellow;
     const isGoal = detail.scoringPlay === true
       || ['70', '71', '72'].includes(typeId)
-      || typeText.includes('goal');
+      || typeText.includes('goal')
+      || detail.ownGoal === true
+      || detail.penaltyKick === true;
 
     if (!isRedCard && !isGoal) continue;
 
@@ -81,11 +140,14 @@ function extractKeyEvents(competitions, data, home, away) {
           ? 'penaltyGoal'
           : 'goal';
 
-    const athlete = Array.isArray(detail.athletesInvolved) ? detail.athletesInvolved[0] : null;
-    const player = String(athlete?.displayName || athlete?.fullName || athlete?.shortName || '');
-    const minute = String(
-      detail.clock?.displayValue || detail.time?.displayValue || detail.displayClock || ''
-    );
+    const player = extractPlayerName(detail);
+    const minuteValue = detail.clock?.displayValue
+      || detail.time?.displayValue
+      || detail.displayClock
+      || detail.clockDisplayValue
+      || detail.minute
+      || '';
+    const minute = String(minuteValue);
     const teamId = String(detail.team?.id || detail.teamId || '');
     const side = teamId && teamId === homeId
       ? 'home'
@@ -93,17 +155,43 @@ function extractKeyEvents(competitions, data, home, away) {
         ? 'away'
         : null;
     const teamName = String(detail.team?.displayName || detail.team?.name || '');
-    const key = String(detail.id || [kind, minute, player, teamId || teamName].join('|'));
+    const teamKey = teamId || side || normalize(teamName) || 'unknown';
+    const baseKey = [kind, minute, teamKey].join('|');
+    const normalizedPlayer = normalize(player);
 
-    if (seen.has(key)) continue;
-    seen.add(key);
+    if (baseIndexes.has(baseKey)) {
+      const existingIndex = baseIndexes.get(baseKey);
+      const existing = events[existingIndex];
 
-    events.push({ key, kind, minute, player, side, teamId, teamName });
+      // Aynı olay ESPN'in birden fazla alanında gelirse tek satır tut;
+      // oyuncu adı dolu gelen kopyayı tercih et.
+      if (!existing.player && player) {
+        existing.player = player;
+        existing.key = [baseKey, normalizedPlayer].join('|');
+      } else if (player && normalize(existing.player) !== normalizedPlayer) {
+        // Aynı takımın aynı dakikada birden fazla olayı varsa ikisini koru.
+        const playerKey = [baseKey, normalizedPlayer].join('|');
+        if (!events.some(item => item.key === playerKey)) {
+          events.push({ key: playerKey, kind, minute, player, side, teamId, teamName });
+        }
+      }
+      continue;
+    }
+
+    baseIndexes.set(baseKey, events.length);
+    events.push({
+      key: [baseKey, normalizedPlayer].join('|'),
+      kind,
+      minute,
+      player,
+      side,
+      teamId,
+      teamName
+    });
   }
 
   return events;
 }
-
 function extractMatch(data, expectedId) {
   const header = data?.header || {};
   const headerId = String(header.id || data?.id || data?.event?.id || '');
@@ -135,7 +223,7 @@ function extractMatch(data, expectedId) {
     period: Number(status.period || 0) || null,
     homeScore: parseScore(home.score),
     awayScore: parseScore(away.score),
-    keyEvents: extractKeyEvents(competitions, data, home, away)
+    keyEvents: extractKeyEvents(competition, data, home, away)
   };
 }
 
