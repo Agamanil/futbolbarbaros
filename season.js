@@ -630,6 +630,14 @@ function renderBonusControls() {
     return;
   }
 
+  const manualTodaySelection = seasonSelections().find(item =>
+    item.manual === true && item.selectionDay === context.today && item.targetDate === context.tomorrow
+  );
+  if (manualTodaySelection) {
+    status.textContent = `Yönetici yarının bonus maçını seçti: ${manualTodaySelection.homeTeam} - ${manualTodaySelection.awayTeam}.`;
+    return;
+  }
+
   if (!context.isLastPlace) {
     const names = context.daily.lastPlayers.map(person => person.name).join(', ');
     status.textContent = `Bugünün sonuncuları: ${names || '—'}. Seçim hakkı şu an sende değil.`;
@@ -801,6 +809,10 @@ async function selectBonusMatch(matchId) {
   if (!context.daily.completed) return alert('Bugünün tüm maç sonuçları girilmeden seçim yapılamaz.');
   if (!context.isLastPlace) return alert('Bu ligde bugünün sonuncuları arasında değilsin.');
   if (context.myTodaySelection) return alert('Bugün zaten seçim yaptın.');
+  const manualTodaySelection = seasonSelections().find(item =>
+    item.manual === true && item.selectionDay === context.today && item.targetDate === context.tomorrow
+  );
+  if (manualTodaySelection) return alert('Yönetici yarının bonus maçını zaten seçti.');
   if (context.myYesterdaySelection) return alert('Dün seçim yaptığın için bugün seçim yapamazsın.');
 
   if (dayKey(match.kickoff) !== context.tomorrow || hasResult(match) || toDate(match.kickoff).getTime() <= Date.now()) {
@@ -1060,6 +1072,8 @@ function tryAttachCurrentLeague() {
 
   attachLeague(select.value);
 }
+
+$('manualBonusSelectBtn')?.addEventListener('click', adminSelectBonusMatch);
 
 // Sezon görüntüleme seçimi: yalnızca bu cihazdaki görünümü değiştirir.
 $('seasonViewSelect')?.addEventListener('change', event => {
