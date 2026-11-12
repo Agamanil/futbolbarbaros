@@ -51,9 +51,9 @@ function extractKeyEvents(competitions, data, home, away) {
       : [])
   ].filter(Array.isArray);
 
-  // ESPN'in summary yanıtında olaylar competition.details altında gelir.
-  // Birden fazla kopya varsa en dolu listeyi kullan.
-  const details = detailLists.sort((a, b) => b.length - a.length)[0] || [];
+  // Summary farklı bölümlerde aynı olayı tekrarlayabilir.
+  // Tüm listeleri birleştirip aşağıda kararlı anahtarla tekilleştiriyoruz.
+  const details = detailLists.flat();
   const homeId = String(home?.team?.id || home?.id || '');
   const awayId = String(away?.team?.id || away?.id || '');
   const events = [];
