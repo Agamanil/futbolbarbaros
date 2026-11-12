@@ -660,6 +660,133 @@ function renderBonusControls() {
   });
 }
 
+function renderManualBonusAdmin() {
+  const select = $('manualBonusMatchSelect');
+  const button = $('manualBonusSelectBtn');
+  const status = $('manualBonusAdminStatus');
+  if (!select || !button || !status) return;
+
+  select.innerHTML = '';
+  button.disabled = true;
+
+  if (!isAdmin()) {
+    status.textContent = 'Bu alan yalnızca yöneticiye açıktır.';
+    return;
+  }
+
+  const context = getTodayContext();
+  const season = context.season;
+
+  if (!season || !season.bonusEnabled || selectedSeasonId !== activeSeasonId) {
+    status.textContent = 'Bonus sistemi açık olan aktif bir sezon seçili olmalı.';
+    return;
+  }
+
+  if (context.today < season.startDate || context.today >= season.endDate) {
+    status.textContent = 'Bugün aktif sezonun bonus seçim tarihleri içinde değil.';
+    return;
+  }
+
+  if (!context.daily.matches.length || !context.daily.completed) {
+    status.textContent = 'Önce bugünün bütün maç sonuçları ve etkinlik puanları kesinleşmeli.';
+    return;
+  }
+
+  const existingToday = seasonSelections().filter(item =>
+    item.selectionDay === context.today && item.targetDate === context.tomorrow
+  );
+
+  if (existingToday.length) {
+    const selectedNames = [...new Set(existingToday.map(item =>
+      item.homeTeam && item.awayTeam ? `${item.homeTeam} - ${item.awayTeam}` : 'Bonus maç'
+    ))];
+    status.textContent = `Bugünün bonus seçimi zaten yapılmış: ${selectedNames.join(', ')}.`;
+    return;
+  }
+
+  if (!context.nextDayMatches.length) {
+    status.textContent = 'Yarın için henüz seçilebilir maç yok.';
+    return;
+  }
+
+  select.innerHTML = context.nextDayMatches.map(match =>
+    `<option value="${safe(match.id)}">${safe(match.homeTeam)} - ${safe(match.awayTeam)} · ${safe(new Date(toDate(match.kickoff)).toLocaleString('tr-TR', { dateStyle: 'short', timeStyle: 'short', timeZone: TIME_ZONE }))}</option>`
+  ).join('');
+
+  button.disabled = false;
+  status.textContent = 'Sonuncu hesabına erişilemiyorsa, yarının bonus maçını burada yönetici olarak seçebilirsin.';
+}
+
+async function adminSelectBonusMatch() {
+  if (!isAdmin()) return alert('Yönetici yetkisi yok.');
+
+  const context = getTodayContext();
+  const season = context.season;
+  const select = $('manualBonusMatchSelect');
+  const button = $('manualBonusSelectBtn');
+
+  if (!season || !season.bonusEnabled || selectedSeasonId !== activeSeasonId) {
+    return alert('Bonus sistemi açık olan aktif sezon bulunamadı.');
+  }
+  if (context.today < season.startDate || context.today >= season.endDate) {
+    return alert('Bugün bonus seçimi yapılabilecek tarih aralığında değil.');
+  }
+  if (!context.daily.completed) {
+    return alert('Bugünün bütün maç sonuçları ve etkinlik puanları kesinleşmeden seçim yapılamaz.');
+  }
+
+  const existingToday = seasonSelections().some(item =>
+    item.selectionDay === context.today && item.targetDate === context.tomorrow
+  );
+  if (existingToday) {
+    renderManualBonusAdmin();
+    return alert('Bugün için bonus maç zaten seçilmiş. İkinci bir seçim yapılamaz.');
+  }
+
+  const matchId = select?.value || '';
+  const match = context.nextDayMatches.find(item => item.id === matchId);
+  if (!match) return alert('Yarın için geçerli bir maç seç.');
+
+  button.disabled = true;
+  try {
+    const latestRef = doc(db, 'groups', groupCode, 'matches', matchId);
+    const latestSnap = await getDoc(latestRef);
+    if (!latestSnap.exists()) throw new Error('Maç artık bulunamıyor.');
+
+    const latest = latestSnap.data();
+    if (!latest.kickoff || dayKey(latest.kickoff) !== context.tomorrow ||
+        hasResult(latest) || toDate(latest.kickoff).getTime() <= Date.now()) {
+      throw new Error('Bu maç artık seçilebilir değil.');
+    }
+
+    const selectionId = `${context.today}_MANUAL_ADMIN`;
+    const selectionRef = doc(db, 'groups', groupCode, 'bonusSelections', selectionId);
+    const existingSnap = await getDoc(selectionRef);
+    if (existingSnap.exists()) throw new Error('Yönetici manuel seçimi zaten kaydedilmiş.');
+
+    await setDoc(selectionRef, {
+      uid: `manual-admin-${uid}`,
+      playerName: 'Yönetici (Manuel)',
+      matchId,
+      homeTeam: latest.homeTeam,
+      awayTeam: latest.awayTeam,
+      selectionDay: context.today,
+      targetDate: context.tomorrow,
+      seasonId: season.id,
+      selectedAt: serverTimestamp(),
+      manual: true,
+      manualBy: uid
+    });
+
+    alert(`${latest.homeTeam} - ${latest.awayTeam} yarının bonus maçı olarak yönetici tarafından seçildi.`);
+    renderAll();
+  } catch (error) {
+    console.error('Yönetici manuel bonus seçimi:', error);
+    alert('Manuel bonus seçimi kaydedilemedi: ' + (error.message || error));
+    button.disabled = false;
+  }
+}
+
 async function selectBonusMatch(matchId) {
   const context = getTodayContext();
   const match = seasonMatches().find(item => item.id === matchId);
@@ -794,6 +921,7 @@ function renderAll() {
   syncHonorListener();
   ensureHonorSnapshot(seasonResult);
   renderBonusControls();
+  renderManualBonusAdmin();
   renderSelectedBonuses(dayKey());
   renderSeasonAdminList();
 }
