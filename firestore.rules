@@ -156,7 +156,23 @@ service cloud.firestore {
 
       match /bonusSelections/{selectionId} {
         allow read: if isMember(groupId) || isAdmin();
-        allow create: if isMember(groupId)
+        allow create: if (
+          isAdmin()
+          && request.resource.data.keys().hasAll([
+            'uid', 'playerName', 'matchId', 'homeTeam', 'awayTeam',
+            'selectionDay', 'targetDate', 'seasonId', 'selectedAt', 'manual', 'manualBy'
+          ])
+          && request.resource.data.keys().hasOnly([
+            'uid', 'playerName', 'matchId', 'homeTeam', 'awayTeam',
+            'selectionDay', 'targetDate', 'seasonId', 'selectedAt', 'manual', 'manualBy'
+          ])
+          && request.resource.data.manual == true
+          && request.resource.data.manualBy == request.auth.uid
+          && request.resource.data.selectedAt == request.time
+          && request.resource.data.matchId is string
+          && matchExists(groupId, request.resource.data.matchId)
+          && get(/databases/$(database)/documents/groups/$(groupId)/matches/$(request.resource.data.matchId)).data.kickoff > request.time
+        ) || (isMember(groupId)
           && request.resource.data.keys().hasAll([
             'uid', 'playerName', 'matchId', 'homeTeam', 'awayTeam',
             'selectionDay', 'targetDate', 'selectedAt'
@@ -169,7 +185,7 @@ service cloud.firestore {
           && request.resource.data.selectedAt == request.time
           && request.resource.data.matchId is string
           && matchExists(groupId, request.resource.data.matchId)
-          && get(/databases/$(database)/documents/groups/$(groupId)/matches/$(request.resource.data.matchId)).data.kickoff > request.time;
+          && get(/databases/$(database)/documents/groups/$(groupId)/matches/$(request.resource.data.matchId)).data.kickoff > request.time);
         allow update, delete: if isAdmin();
       }
 
