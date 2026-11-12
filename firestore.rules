@@ -7,7 +7,7 @@ service cloud.firestore {
 
     function isAdmin() {
       return signedIn()
-        && request.auth.uid == 'YONETICI_UID_BURAYA';
+        && request.auth.uid == "MUxQ8O20qXa5DzWB7LTMMjilJ0Y2";
     }
 
     function isRestricted(userId) {
