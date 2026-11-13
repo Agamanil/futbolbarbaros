@@ -27,7 +27,7 @@ export default {
     if (request.method !== 'GET') return json({ ok: false, error: 'GET or POST only' }, 405);
 
     const id = url.searchParams.get('event') || '';
-    if (!/^\\d{5,20}$/.test(id)) return json({ ok: false, error: 'Geçersiz ESPN maç ID' }, 400);
+    if (!/^\d{5,20}$/.test(id)) return json({ ok: false, error: 'Geçersiz ESPN maç ID' }, 400);
 
     const leagues = ['tur.1','eng.1','esp.1','ger.1','ita.1','uefa.champions','uefa.europa','uefa.europa.conf','uefa.nations'];
     for (const league of leagues) {
@@ -155,7 +155,7 @@ async function createFirebaseAccessToken(serviceAccount) {
   const pem = serviceAccount.private_key
     .replace(/-----BEGIN PRIVATE KEY-----/g, '')
     .replace(/-----END PRIVATE KEY-----/g, '')
-    .replace(/\\s/g, '');
+    .replace(/\s/g, '');
   const der = Uint8Array.from(atob(pem), char => char.charCodeAt(0));
   const key = await crypto.subtle.importKey(
     'pkcs8',
@@ -193,7 +193,7 @@ function base64Url(value) {
 function base64UrlBytes(bytes) {
   let binary = '';
   for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary).replace(/=/g, '').replace(/\\+/g, '-').replace(/\\//g, '_');
+  return btoa(binary).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
 }
 
 function json(body, status = 200) {
