@@ -177,6 +177,8 @@ service cloud.firestore {
           && request.resource.data.matchId is string
           && matchExists(groupId, request.resource.data.matchId)
           && get(/databases/$(database)/documents/groups/$(groupId)/matches/$(request.resource.data.matchId)).data.kickoff > request.time
+          && get(/databases/$(database)/documents/groups/$(groupId)/matches/$(request.resource.data.matchId)).data.get('homeScore', null) == null
+          && get(/databases/$(database)/documents/groups/$(groupId)/matches/$(request.resource.data.matchId)).data.get('awayScore', null) == null
         ) || (isMember(groupId)
           && request.resource.data.keys().hasAll([
             'uid', 'playerName', 'matchId', 'homeTeam', 'awayTeam',
@@ -193,7 +195,9 @@ service cloud.firestore {
           && request.resource.data.selectedAt == request.time
           && request.resource.data.matchId is string
           && matchExists(groupId, request.resource.data.matchId)
-          && get(/databases/$(database)/documents/groups/$(groupId)/matches/$(request.resource.data.matchId)).data.kickoff > request.time);
+          && get(/databases/$(database)/documents/groups/$(groupId)/matches/$(request.resource.data.matchId)).data.kickoff > request.time
+          && get(/databases/$(database)/documents/groups/$(groupId)/matches/$(request.resource.data.matchId)).data.get('homeScore', null) == null
+          && get(/databases/$(database)/documents/groups/$(groupId)/matches/$(request.resource.data.matchId)).data.get('awayScore', null) == null);
         allow update, delete: if isAdmin();
       }
 
