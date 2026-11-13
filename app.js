@@ -105,13 +105,13 @@ async function setupPushNotifications() {
     }
   });
 
-  if (Notification.permission === 'granted') {
+  if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
     try {
       await enablePushNotifications(false);
     } catch (err) {
       console.warn('Önceden izin verilen bildirim kaydı yenilenemedi:', err);
     }
-  } else if (Notification.permission === 'denied') {
+  } else if (typeof Notification !== 'undefined' && Notification.permission === 'denied') {
     button.textContent = 'Bildirim izni kapalı';
   }
 }
