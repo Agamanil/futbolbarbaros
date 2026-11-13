@@ -49,6 +49,9 @@ export default {
       } catch (e) { /* Try the next ESPN competition code. */ }
     }
     return json({ ok: false, error: 'Bu ID seçili ESPN liglerinde bulunamadı veya maç bilgisi henüz yayınlanmadı.' }, 404);
+  },
+  async scheduled(controller, env, ctx) {
+    ctx.waitUntil(runAutomaticNotifications(env));
   }
 };
 
@@ -145,7 +148,7 @@ async function createFirebaseAccessToken(serviceAccount) {
   const header = { alg: 'RS256', typ: 'JWT' };
   const claims = {
     iss: serviceAccount.client_email,
-    scope: 'https://www.googleapis.com/auth/firebase.messaging',
+    scope: 'https://www.googleapis.com/auth/cloud-platform',
     aud: 'https://oauth2.googleapis.com/token',
     iat: now,
     exp: now + 3600
@@ -201,4 +204,196 @@ function json(body, status = 200) {
     status,
     headers: { ...corsHeaders, 'Content-Type': 'application/json; charset=utf-8' }
   });
+}
+
+// Cloudflare Cron ile otomatik bildirim taraması.
+const FIRESTORE_ROOT = "https://firestore.googleapis.com/v1/projects/" + FIREBASE_PROJECT_ID + "/databases/(default)/documents";
+
+function fsValue(v) {
+  if (!v) return null;
+  if (v.stringValue !== undefined) return v.stringValue;
+  if (v.integerValue !== undefined) return Number(v.integerValue);
+  if (v.doubleValue !== undefined) return Number(v.doubleValue);
+  if (v.booleanValue !== undefined) return v.booleanValue;
+  if (v.timestampValue !== undefined) return v.timestampValue;
+  if (v.arrayValue) return (v.arrayValue.values || []).map(fsValue);
+  if (v.mapValue) return fsFields(v.mapValue.fields || {});
+  return null;
+}
+function fsFields(fields) {
+  const out = {};
+  for (const key of Object.keys(fields || {})) out[key] = fsValue(fields[key]);
+  return out;
+}
+function fsWrite(v) {
+  if (typeof v === "string") return { stringValue: v };
+  if (Array.isArray(v)) return { arrayValue: { values: v.map(fsWrite) } };
+  return { nullValue: "NULL_VALUE" };
+}
+async function fsList(path, token) {
+  const response = await fetch(FIRESTORE_ROOT + "/" + path + "?pageSize=1000", {
+    headers: { Authorization: "Bearer " + token }
+  });
+  if (!response.ok) throw new Error("Firestore listeleme HTTP " + response.status);
+  const data = await response.json();
+  return (data.documents || []).map(doc => ({
+    id: doc.name.split("/").pop(),
+    ...fsFields(doc.fields || {})
+  }));
+}
+async function fsGet(path, token) {
+  const response = await fetch(FIRESTORE_ROOT + "/" + path, {
+    headers: { Authorization: "Bearer " + token }
+  });
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error("Firestore okuma HTTP " + response.status);
+  const data = await response.json();
+  return fsFields(data.fields || {});
+}
+async function fsSaveState(code, state, token) {
+  const fields = {
+    sentStarts: fsWrite(state.sentStarts.slice(-500)),
+    sentResults: fsWrite(state.sentResults.slice(-500)),
+    sentBonuses: fsWrite(state.sentBonuses.slice(-500)),
+    lastPlaceDay: fsWrite(state.lastPlaceDay || "")
+  };
+  const query = Object.keys(fields).map(key => "updateMask.fieldPaths=" + key).join("&");
+  const response = await fetch(FIRESTORE_ROOT + "/notificationState/" + encodeURIComponent(code) + "?" + query, {
+    method: "PATCH",
+    headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+    body: JSON.stringify({ fields })
+  });
+  if (!response.ok) throw new Error("Bildirim durumu kaydedilemedi: HTTP " + response.status);
+}
+function fsTime(value) {
+  const n = Date.parse(value || "");
+  return Number.isFinite(n) ? n : 0;
+}
+function localDay(date) {
+  const p = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Istanbul", year: "numeric", month: "2-digit", day: "2-digit"
+  }).formatToParts(date);
+  const get = type => p.find(x => x.type === type).value;
+  return get("year") + "-" + get("month") + "-" + get("day");
+}
+function previousDay(key) {
+  const a = key.split("-").map(Number);
+  const d = new Date(Date.UTC(a[0], a[1] - 1, a[2] - 1));
+  return d.getUTCFullYear() + "-" + String(d.getUTCMonth() + 1).padStart(2, "0") + "-" + String(d.getUTCDate()).padStart(2, "0");
+}
+function finished(m) {
+  return m.homeScore !== undefined && m.awayScore !== undefined;
+}
+async function sendAuto(tokens, title, body, accessToken) {
+  const unique = [...new Set(tokens)].filter(x => typeof x === "string" && x.length >= 100);
+  for (let i = 0; i < unique.length; i += 20) {
+    await Promise.all(unique.slice(i, i + 20).map(token => fetch(
+      "https://fcm.googleapis.com/v1/projects/" + FIREBASE_PROJECT_ID + "/messages:send",
+      {
+        method: "POST",
+        headers: { Authorization: "Bearer " + accessToken, "Content-Type": "application/json" },
+        body: JSON.stringify({ message: {
+          token,
+          notification: { title, body },
+          webpush: { fcmOptions: { link: "https://agamanil.github.io/futbolbarbaros/" } }
+        } })
+      }
+    )));
+  }
+}
+async function getRiskPoints(code, matches, token) {
+  const points = new Map();
+  for (const match of matches) {
+    const base = "groups/" + encodeURIComponent(code) + "/matches/" + encodeURIComponent(match.id) + "/risks";
+    const risks = await fsList(base, token);
+    for (const risk of risks) {
+      if (risk.status !== "resolved" || typeof risk.outcome !== "boolean") continue;
+      const people = await fsList(base + "/" + encodeURIComponent(risk.id) + "/participants", token);
+      for (const person of people) {
+        const correct = (person.choice === "yes") === risk.outcome;
+        const score = correct ? Number(risk.plusPoints || 0) : Number(risk.minusPoints || 0);
+        points.set(person.uid, (points.get(person.uid) || 0) + score);
+      }
+    }
+  }
+  return points;
+}
+async function runAutomaticNotifications(env) {
+  if (!env.FIREBASE_SERVICE_ACCOUNT) return console.error("FIREBASE_SERVICE_ACCOUNT secret eksik.");
+  try {
+    const account = JSON.parse(env.FIREBASE_SERVICE_ACCOUNT);
+    if (account.project_id !== FIREBASE_PROJECT_ID || !account.client_email || !account.private_key) {
+      throw new Error("Firebase servis hesabı geçersiz.");
+    }
+    const accessToken = await createFirebaseAccessToken(account);
+    const [groups, tokens] = await Promise.all([fsList("groups", accessToken), fsList("pushTokens", accessToken)]);
+    const now = Date.now();
+    const today = localDay(new Date(now));
+    for (const group of groups) {
+      const code = group.id;
+      try {
+        const [matches, players, bonuses, oldState] = await Promise.all([
+          fsList("groups/" + encodeURIComponent(code) + "/matches", accessToken),
+          fsList("groups/" + encodeURIComponent(code) + "/players", accessToken),
+          fsList("groups/" + encodeURIComponent(code) + "/bonusSelections", accessToken),
+          fsGet("notificationState/" + encodeURIComponent(code), accessToken)
+        ]);
+        const groupTokens = tokens.filter(x => x.token && Array.isArray(x.groupCodes) && x.groupCodes.includes(code)).map(x => x.token);
+        const starts = new Set(Array.isArray(oldState && oldState.sentStarts) ? oldState.sentStarts : matches.filter(m => fsTime(m.kickoff) <= now).map(m => m.id));
+        const results = new Set(Array.isArray(oldState && oldState.sentResults) ? oldState.sentResults : matches.filter(finished).map(m => m.id));
+        const bonusDone = new Set(Array.isArray(oldState && oldState.sentBonuses) ? oldState.sentBonuses : bonuses.map(b => b.id));
+        let lastPlaceDay = oldState && oldState.lastPlaceDay || "";
+
+        for (const match of matches) {
+          const kickoff = fsTime(match.kickoff);
+          if (kickoff && kickoff <= now && kickoff > now - 10 * 60 * 1000 && !starts.has(match.id)) {
+            await sendAuto(groupTokens, "⚽ Maç başladı!", (match.homeTeam || "Ev sahibi") + " - " + (match.awayTeam || "Deplasman") + " başladı.", accessToken);
+            starts.add(match.id);
+          }
+          if (finished(match) && match.resultAt && !results.has(match.id)) {
+            await sendAuto(groupTokens, "🏁 Maç sonucu açıklandı", (match.homeTeam || "Ev sahibi") + " " + match.homeScore + "-" + match.awayScore + " " + (match.awayTeam || "Deplasman") + " · Puan tablosu güncellendi.", accessToken);
+            results.add(match.id);
+          }
+        }
+        for (const bonus of bonuses) {
+          if (bonusDone.has(bonus.id)) continue;
+          await sendAuto(groupTokens, "⭐ Yeni bonus maçı seçildi!", (bonus.playerName || "Sonuncu") + " " + (bonus.homeTeam || "Ev sahibi") + " - " + (bonus.awayTeam || "Deplasman") + " maçını seçti. Puanlar 2X!", accessToken);
+          bonusDone.add(bonus.id);
+        }
+
+        const todayMatches = matches.filter(m => fsTime(m.kickoff) && localDay(new Date(fsTime(m.kickoff))) === today);
+        if (todayMatches.length && todayMatches.every(finished) && lastPlaceDay !== today && players.length) {
+          const riskPoints = await getRiskPoints(code, matches, accessToken);
+          const bonusIds = new Set(bonuses.map(b => b.matchId));
+          const standings = players.map(player => {
+            let pts = riskPoints.get(player.id) || 0;
+            for (const match of matches) {
+              if (!finished(match)) continue;
+              const prediction = match.predictions && match.predictions[player.id];
+              if (!prediction) continue;
+              const exact = prediction.home === match.homeScore && prediction.away === match.awayScore;
+              const same = Math.sign(match.homeScore - match.awayScore) === Math.sign(prediction.home - prediction.away);
+              pts += (exact ? 3 : same ? 1 : 0) * (bonusIds.has(match.id) ? 2 : 1);
+            }
+            return { id: player.id, name: player.name, pts };
+          });
+          const lowest = Math.min(...standings.map(p => p.pts));
+          const yesterday = previousDay(today);
+          const selectedYesterday = new Set(bonuses.filter(b => b.selectionDay === yesterday).map(b => b.uid));
+          const eligible = standings.filter(p => p.pts === lowest && !selectedYesterday.has(p.id));
+          const ids = new Set(eligible.map(p => p.id));
+          const personalTokens = tokens.filter(x => x.token && ids.has(x.uid) && Array.isArray(x.groupCodes) && x.groupCodes.includes(code)).map(x => x.token);
+          if (eligible.length) await sendAuto(personalTokens, "📉 Günün sonuncusu belli oldu!", "Sonuncu: " + eligible.map(p => p.name || "Oyuncu").join(", ") + ". Yarın için bonus maç seçme hakkı sende!", accessToken);
+          lastPlaceDay = today;
+        }
+        await fsSaveState(code, {
+          sentStarts: [...starts], sentResults: [...results], sentBonuses: [...bonusDone], lastPlaceDay
+        }, accessToken);
+      } catch (error) {
+        console.error("Otomatik bildirim " + code + ":", error);
+      }
+    }
+  } catch (error) {
+    console.error("Otomatik bildirim taraması:", error);
+  }
 }
