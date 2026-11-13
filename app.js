@@ -2,11 +2,13 @@
 // Firebase Spark (ucretsiz plan) ile calisir. Cloud Functions gerektirmez.
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/13.2.0/firebase-app.js';
 import { getAuth, signInAnonymously, onAuthStateChanged, setPersistence, browserLocalPersistence } from 'https://www.gstatic.com/firebasejs/13.2.0/firebase-auth.js';
+import { getIdToken } from 'https://www.gstatic.com/firebasejs/13.2.0/firebase-auth.js';
+import { getMessaging, getToken, isSupported, onMessage } from 'https://www.gstatic.com/firebasejs/13.2.0/firebase-messaging.js';
 import {
   getFirestore, doc, getDoc, setDoc, collection, getDocs,
   query, orderBy, onSnapshot, updateDoc, deleteDoc, serverTimestamp, Timestamp
 } from 'https://www.gstatic.com/firebasejs/13.2.0/firebase-firestore.js';
-import { firebaseConfig, ADMIN_UID } from './config.js';
+import { firebaseConfig, ADMIN_UID, firebaseVapidKey } from './config.js';
 
 const $ = id => document.getElementById(id);
 const hasConfig = Boolean(firebaseConfig?.apiKey && firebaseConfig?.projectId);
@@ -22,6 +24,7 @@ const KNOWN_LEAGUES = [
 const KNOWN_LEAGUE_CODES = KNOWN_LEAGUES.map(item => item.code);
 
 let db, uid = null, player = null, groupCode = '';
+let authUser = null, pushMessaging = null, browserPushToken = null, foregroundMessageBound = false;
 let memberships = [], matches = [], players = [], bonusSelections = [], activeMatch = null;
 let leagueCatalog = [];
 let leagueNames = {};
@@ -30,6 +33,126 @@ let unsubMatches = null, unsubPlayers = null, unsubBonusSelections = null;
 let unsubAvatars = null, unsubProfiles = null;
 
 const isAdmin = () => Boolean(uid) && uid === ADMIN_UID;
+
+async function savePushRegistration() {
+  if (!db || !uid || !browserPushToken || !memberships.length) return;
+  await setDoc(doc(db, 'pushTokens', uid), {
+    uid,
+    token: browserPushToken,
+    groupCodes: [...new Set(memberships)],
+    playerName: player?.name || '',
+    updatedAt: serverTimestamp()
+  }, { merge: true });
+}
+
+async function enablePushNotifications(requestPermission = true) {
+  const button = $('enableNotificationsButton');
+  if (!('Notification' in window) || !('serviceWorker' in navigator)) {
+    throw new Error('Bu tarayıcı web bildirimlerini desteklemiyor.');
+  }
+
+  let permission = Notification.permission;
+  if (permission !== 'granted' && requestPermission) {
+    permission = await Notification.requestPermission();
+  }
+  if (permission !== 'granted') {
+    if (button) button.textContent = permission === 'denied' ? 'Bildirim izni kapalı' : '🔔 Bildirimleri aç';
+    throw new Error('Bildirim izni verilmedi. Tarayıcı site ayarlarından izin verebilirsin.');
+  }
+
+  if (!await isSupported()) {
+    throw new Error('Bu tarayıcı Firebase web bildirimlerini desteklemiyor.');
+  }
+
+  const swUrl = new URL('./firebase-messaging-sw.js', import.meta.url);
+  const swScope = new URL('./', import.meta.url).pathname;
+  const registration = await navigator.serviceWorker.register(swUrl, { scope: swScope });
+  pushMessaging = getMessaging();
+  browserPushToken = await getToken(pushMessaging, {
+    vapidKey: firebaseVapidKey,
+    serviceWorkerRegistration: registration
+  });
+
+  if (!browserPushToken) throw new Error('Bildirim cihaz kaydı oluşturulamadı.');
+  await savePushRegistration();
+
+  if (!foregroundMessageBound) {
+    onMessage(pushMessaging, payload => {
+      const title = payload.notification?.title || payload.data?.title || 'FUTBOLBARBAROS';
+      const body = payload.notification?.body || payload.data?.body || '';
+      if (Notification.permission === 'granted') new Notification(title, { body });
+    });
+    foregroundMessageBound = true;
+  }
+
+  if (button) button.textContent = '🔔 Bildirimler açık';
+  return true;
+}
+
+async function setupPushNotifications() {
+  const button = $('enableNotificationsButton');
+  if (!button) return;
+  button.addEventListener('click', async () => {
+    button.disabled = true;
+    try {
+      await enablePushNotifications(true);
+      message($('pushNotificationMessage'), 'Bu cihaz bildirimlere kaydedildi.', false);
+    } catch (err) {
+      console.error('Bildirim kaydı:', err);
+      alert(err.message || 'Bildirimler etkinleştirilemedi.');
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  if (Notification.permission === 'granted') {
+    try {
+      await enablePushNotifications(false);
+    } catch (err) {
+      console.warn('Önceden izin verilen bildirim kaydı yenilenemedi:', err);
+    }
+  } else if (Notification.permission === 'denied') {
+    button.textContent = 'Bildirim izni kapalı';
+  }
+}
+
+async function sendAdminPushNotification() {
+  if (!isAdmin()) throw new Error('Yönetici yetkisi gerekli.');
+  const title = $('pushNotificationTitle')?.value.trim() || '';
+  const body = $('pushNotificationBody')?.value.trim() || '';
+  const target = $('pushNotificationTarget')?.value || 'all';
+  if (!title || !body) throw new Error('Başlık ve mesaj alanlarını doldur.');
+
+  const snapshot = await getDocs(collection(db, 'pushTokens'));
+  const devices = snapshot.docs
+    .map(item => item.data())
+    .filter(item => item.token && (target === 'all' || (Array.isArray(item.groupCodes) && item.groupCodes.includes(target))))
+    .map(item => item.token);
+
+  const uniqueTokens = [...new Set(devices)];
+  if (!uniqueTokens.length) throw new Error('Bu hedef için bildirim izni vermiş cihaz bulunamadı.');
+
+  const idToken = await getIdToken(authUser);
+  const response = await fetch(ESPN_LOOKUP_ENDPOINT, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      action: 'sendNotification',
+      idToken,
+      title,
+      body,
+      tokens: uniqueTokens,
+      url: 'https://agamanil.github.io/futbolbarbaros/'
+    })
+  });
+
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok || !result.ok) {
+    throw new Error(result.error || 'Bildirim gönderilemedi.');
+  }
+  return result;
+}
+
 
 function message(el, text, isError = true) {
   if (!el) return;
@@ -494,6 +617,7 @@ async function boot() {
     }, err => finish(reject, err));
   });
 
+  authUser = user;
   uid = user.uid;
   console.info('FUTBOLBARBAROS Firebase UID:', uid);
   console.info('FUTBOLBARBAROS yönetici hesabı:', isAdmin() ? 'EVET' : 'HAYIR');
@@ -520,6 +644,7 @@ async function boot() {
   }
 
   await restoreSession();
+  await setupPushNotifications();
 }
 
 async function restoreSession() {
@@ -651,6 +776,7 @@ $('joinForm').addEventListener('submit', async e => {
     localStorage.removeItem('fb_player');
 
     await switchLeague(code);
+    await savePushRegistration();
   } catch (err) {
     console.error(err);
     message(msg, err.message || 'Giriş yapılamadı.');
@@ -703,6 +829,7 @@ $('leagueJoinForm').addEventListener('submit', async e => {
     message($('leagueMessage'), 'Lige katıldın!', false);
 
     await switchLeague(code);
+    await savePushRegistration();
   } catch (err) {
     console.error(err);
     message($('leagueMessage'), err.message || 'Lige katılınamadı.');
@@ -1917,6 +2044,22 @@ setInterval(() => {
     renderBonusPanel();
   }
 }, 15000);
+
+$('sendPushNotificationButton')?.addEventListener('click', async () => {
+  const button = $('sendPushNotificationButton');
+  const status = $('pushNotificationMessage');
+  button.disabled = true;
+  message(status, 'Bildirim gönderiliyor...', false);
+  try {
+    const result = await sendAdminPushNotification();
+    message(status, `Gönderildi: ${result.sent || 0} · Başarısız: ${result.failed || 0}`, false);
+  } catch (err) {
+    console.error('Bildirim gönderme hatası:', err);
+    message(status, err.message || 'Bildirim gönderilemedi.');
+  } finally {
+    button.disabled = false;
+  }
+});
 
 boot().catch(err => {
   console.error(err);
