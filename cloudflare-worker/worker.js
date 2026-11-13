@@ -21,6 +21,9 @@ export default {
       if (request.headers.get('Origin') !== SITE_ORIGIN) {
         return json({ ok: false, error: 'Origin not allowed' }, 403);
       }
+      const body = await request.clone().json().catch(() => ({}));
+      if (body.action === 'createAccountTransfer') return handleCreateAccountTransfer(body, env);
+      if (body.action === 'redeemAccountTransfer') return handleRedeemAccountTransfer(body, env);
       return handleNotification(request, env);
     }
 
@@ -54,6 +57,362 @@ export default {
     ctx.waitUntil(runAutomaticNotifications(env));
   }
 };
+
+
+const TRANSFER_COLLECTION = "accountTransfers";
+const MAX_TRANSFER_WRITES = 450;
+
+function firestorePath(path) {
+  return path.split("/").map(encodeURIComponent).join("/");
+}
+function firestoreDocumentUrl(path) {
+  return FIRESTORE_ROOT + "/" + firestorePath(path);
+}
+async function verifyFirebaseIdToken(idToken) {
+  if (typeof idToken !== "string" || !idToken) throw new Error("Oturum doğrulaması eksik.");
+  const response = await fetch(
+    "https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=" + FIREBASE_API_KEY,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ idToken })
+    }
+  );
+  if (!response.ok) throw new Error("Firebase oturumu doğrulanamadı.");
+  const data = await response.json();
+  const user = data.users && data.users[0];
+  if (!user || !user.localId) throw new Error("Firebase kullanıcı kimliği alınamadı.");
+  return user.localId;
+}
+async function getTransferAccessToken(env) {
+  if (!env.FIREBASE_SERVICE_ACCOUNT) throw new Error("Cloudflare Worker servis hesabı ayarlanmamış.");
+  const account = JSON.parse(env.FIREBASE_SERVICE_ACCOUNT);
+  if (account.project_id !== FIREBASE_PROJECT_ID || !account.client_email || !account.private_key) {
+    throw new Error("Firebase servis hesabı bilgileri geçersiz.");
+  }
+  return createFirebaseAccessToken(account);
+}
+async function firestoreGetRaw(path, token) {
+  const response = await fetch(firestoreDocumentUrl(path), {
+    headers: { Authorization: "Bearer " + token }
+  });
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error("Firestore okuma hatası (" + response.status + "): " + path);
+  return response.json();
+}
+async function firestoreListRaw(path, token) {
+  const output = [];
+  let pageToken = "";
+  do {
+    const url = FIRESTORE_ROOT + "/" + firestorePath(path) + "?pageSize=1000" +
+      (pageToken ? "&pageToken=" + encodeURIComponent(pageToken) : "");
+    const response = await fetch(url, { headers: { Authorization: "Bearer " + token } });
+    if (!response.ok) throw new Error("Firestore listeleme hatası (" + response.status + "): " + path);
+    const data = await response.json();
+    output.push(...(data.documents || []));
+    pageToken = data.nextPageToken || "";
+    if (output.length > 5000) throw new Error("Aktarım güvenliği için tek koleksiyonda 5000 kayıt sınırı aşıldı.");
+  } while (pageToken);
+  return output;
+}
+async function firestoreCommit(writes, token) {
+  if (!writes.length) return;
+  const response = await fetch(FIRESTORE_ROOT + ":commit", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer " + token,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ writes })
+  });
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    throw new Error("Hesap aktarımı kaydedilemedi (" + response.status + "). " + detail.slice(0, 300));
+  }
+  return response.json();
+}
+function rawString(document, key) {
+  return document && document.fields && document.fields[key]
+    ? document.fields[key].stringValue || "" : "";
+}
+function rawBoolean(document, key) {
+  return Boolean(document && document.fields && document.fields[key] && document.fields[key].booleanValue);
+}
+function rawTimestamp(document, key) {
+  return document && document.fields && document.fields[key]
+    ? Date.parse(document.fields[key].timestampValue || "") || 0 : 0;
+}
+function cloneFields(document) {
+  return JSON.parse(JSON.stringify(document.fields || {}));
+}
+function setRawString(fields, key, value) {
+  fields[key] = { stringValue: value };
+}
+function setRawBoolean(fields, key, value) {
+  fields[key] = { booleanValue: value };
+}
+function writeCreate(path, fields) {
+  return {
+    update: { name: firestoreDocumentUrl(path), fields },
+    currentDocument: { exists: false }
+  };
+}
+function writeDelete(document) {
+  return {
+    delete: document.name,
+    currentDocument: document.updateTime ? { updateTime: document.updateTime } : { exists: true }
+  };
+}
+function writePatch(document, fields, fieldPaths) {
+  const write = {
+    update: { name: document.name, fields },
+    updateMask: { fieldPaths },
+    currentDocument: document.updateTime ? { updateTime: document.updateTime } : { exists: true }
+  };
+  return write;
+}
+async function isAccountRestricted(uid, token) {
+  const record = await firestoreGetRaw("userModeration/" + uid, token);
+  if (!record) return false;
+  if (rawBoolean(record, "banned")) return true;
+  const timeout = rawTimestamp(record, "timeoutUntil");
+  return timeout > Date.now();
+}
+function normalizeTransferCode(value) {
+  return String(value || "").trim().toUpperCase().replace(/\s+/g, "");
+}
+async function transferCodeHash(code) {
+  const normalized = normalizeTransferCode(code);
+  if (!/^FB-[A-F0-9]{8}(?:-[A-F0-9]{8}){3}$/.test(normalized)) {
+    throw new Error("Aktarım kodunun biçimi geçersiz.");
+  }
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(normalized));
+  return [...new Uint8Array(digest)].map(x => x.toString(16).padStart(2, "0")).join("");
+}
+function makeTransferCode() {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  const hex = [...bytes].map(x => x.toString(16).padStart(2, "0")).join("").toUpperCase();
+  return "FB-" + hex.match(/.{8}/g).join("-");
+}
+function transferJsonError(error, status = 400) {
+  return json({ ok: false, error: error && error.message ? error.message : "Hesap aktarımı tamamlanamadı." }, status);
+}
+
+async function handleCreateAccountTransfer(body, env) {
+  try {
+    const oldUid = await verifyFirebaseIdToken(body.idToken);
+    const token = await getTransferAccessToken(env);
+    if (await isAccountRestricted(oldUid, token)) {
+      return json({ ok: false, error: "Kısıtlı hesaplar için aktarım kodu oluşturulamıyor." }, 403);
+    }
+
+    const code = makeTransferCode();
+    const hash = await transferCodeHash(code);
+    const now = Date.now();
+    const expiresAt = new Date(now + 24 * 60 * 60 * 1000).toISOString();
+    const previous = await firestoreListRaw(TRANSFER_COLLECTION, token);
+    const writes = [];
+
+    // Aynı hesabın önceki, henüz kullanılmamış kodlarını iptal et.
+    for (const item of previous) {
+      if (rawString(item, "oldUid") !== oldUid || rawBoolean(item, "used") || rawBoolean(item, "revoked")) continue;
+      const fields = cloneFields(item);
+      setRawBoolean(fields, "revoked", true);
+      writes.push({
+        update: { name: item.name, fields },
+        currentDocument: item.updateTime ? { updateTime: item.updateTime } : { exists: true }
+      });
+    }
+
+    writes.push(writeCreate(TRANSFER_COLLECTION + "/" + hash, {
+      oldUid: { stringValue: oldUid },
+      createdAt: { timestampValue: new Date(now).toISOString() },
+      expiresAt: { timestampValue: expiresAt },
+      used: { booleanValue: false },
+      revoked: { booleanValue: false }
+    }));
+    await firestoreCommit(writes, token);
+    return json({ ok: true, code, expiresAt });
+  } catch (error) {
+    return transferJsonError(error, 400);
+  }
+}
+
+function replaceUidInArrayField(fields, key, oldUid, newUid) {
+  const value = fields[key];
+  const values = value && value.arrayValue && value.arrayValue.values;
+  if (!Array.isArray(values)) return false;
+  let changed = false;
+  fields[key].arrayValue.values = values.map(item => {
+    if (item && item.stringValue === oldUid) {
+      changed = true;
+      return { stringValue: newUid };
+    }
+    return item;
+  });
+  return changed;
+}
+
+async function handleRedeemAccountTransfer(body, env) {
+  try {
+    const newUid = await verifyFirebaseIdToken(body.idToken);
+    const hash = await transferCodeHash(body.code);
+    const token = await getTransferAccessToken(env);
+    const transfer = await firestoreGetRaw(TRANSFER_COLLECTION + "/" + hash, token);
+    if (!transfer) throw new Error("Aktarım kodu bulunamadı.");
+    if (rawBoolean(transfer, "used")) throw new Error("Bu aktarım kodu daha önce kullanılmış.");
+    if (rawBoolean(transfer, "revoked")) throw new Error("Bu aktarım kodu iptal edilmiş. Eski tarayıcıdan yeni kod oluştur.");
+    if (rawTimestamp(transfer, "expiresAt") <= Date.now()) throw new Error("Aktarım kodunun süresi dolmuş. Eski tarayıcıdan yeni kod oluştur.");
+
+    const oldUid = rawString(transfer, "oldUid");
+    if (!oldUid || oldUid === newUid) throw new Error("Bu kod farklı bir tarayıcıdaki hesap için kullanılmalı.");
+    if (await isAccountRestricted(oldUid, token) || await isAccountRestricted(newUid, token)) {
+      return json({ ok: false, error: "Kısıtlı hesaplar arasında aktarım yapılamaz." }, 403);
+    }
+
+    const groupDocs = await firestoreListRaw("groups", token);
+    const groupCodes = groupDocs.map(item => item.name.split("/").pop());
+    const writes = [];
+    const transferredGroups = [];
+    let movedPredictions = 0, movedBonuses = 0, movedRisks = 0, movedSeasonRecords = 0;
+
+    // Hedef oturumun önceden bir oyuncu kaydı varsa üzerine yazma.
+    for (const code of groupCodes) {
+      const targetPlayer = await firestoreGetRaw("groups/" + code + "/players/" + newUid, token);
+      if (targetPlayer) throw new Error("Bu tarayıcıda zaten bir lig oyuncu kaydı var. Aktarım için boş bir tarayıcı hesabı gerekli.");
+    }
+    if (await firestoreGetRaw("users/" + newUid, token)) {
+      throw new Error("Bu tarayıcı hesabında profil kaydı zaten var. Mevcut hesabın üzerine yazılmadı.");
+    }
+
+    for (const code of groupCodes) {
+      const playerPath = "groups/" + code + "/players/" + oldUid;
+      const oldPlayer = await firestoreGetRaw(playerPath, token);
+      if (!oldPlayer) continue;
+      const playerFields = cloneFields(oldPlayer);
+      setRawString(playerFields, "uid", newUid);
+      writes.push(writeCreate("groups/" + code + "/players/" + newUid, playerFields));
+      writes.push(writeDelete(oldPlayer));
+      transferredGroups.push(code);
+
+      // Maç tahminlerindeki UID anahtarını değiştir.
+      const matches = await firestoreListRaw("groups/" + code + "/matches", token);
+      for (const match of matches) {
+        const predictions = match.fields && match.fields.predictions;
+        const predictionFields = predictions && predictions.mapValue && predictions.mapValue.fields;
+        if (!predictionFields || !Object.prototype.hasOwnProperty.call(predictionFields, oldUid)) continue;
+        if (Object.prototype.hasOwnProperty.call(predictionFields, newUid)) {
+          throw new Error(code + " liginde hedef hesap için önceden tahmin var; güvenlik nedeniyle aktarım durduruldu.");
+        }
+        const next = JSON.parse(JSON.stringify(predictions));
+        next.mapValue.fields[newUid] = next.mapValue.fields[oldUid];
+        delete next.mapValue.fields[oldUid];
+        writes.push(writePatch(match, { predictions: next }, ["predictions"]));
+        movedPredictions++;
+      }
+
+      // Bonus seçimlerini, kontrol edilen doküman kimlikleriyle birlikte taşı.
+      const bonuses = await firestoreListRaw("groups/" + code + "/bonusSelections", token);
+      for (const bonus of bonuses) {
+        if (rawString(bonus, "uid") !== oldUid) continue;
+        const nextId = bonus.name.split("/").pop().endsWith("_" + oldUid)
+          ? bonus.name.split("/").pop().slice(0, -oldUid.length) + newUid
+          : bonus.name.split("/").pop();
+        const nextFields = cloneFields(bonus);
+        setRawString(nextFields, "uid", newUid);
+        if (nextId !== bonus.name.split("/").pop()) {
+          const targetBonus = await firestoreGetRaw("groups/" + code + "/bonusSelections/" + nextId, token);
+          if (targetBonus) throw new Error(code + " liginde aynı güne ait bonus kaydı çakışıyor.");
+          writes.push(writeCreate("groups/" + code + "/bonusSelections/" + nextId, nextFields));
+          writes.push(writeDelete(bonus));
+        } else {
+          writes.push(writePatch(bonus, { uid: nextFields.uid }, ["uid"]));
+        }
+        movedBonuses++;
+      }
+
+      // Risk etkinliklerine katılım belgeleri UID ile anahtarlanır.
+      for (const match of matches) {
+        const risks = await firestoreListRaw("groups/" + code + "/matches/" + match.name.split("/").pop() + "/risks", token);
+        for (const risk of risks) {
+          const riskId = risk.name.split("/").pop();
+          const participantPath = "groups/" + code + "/matches/" + match.name.split("/").pop() + "/risks/" + riskId + "/participants";
+          const sourceParticipant = await firestoreGetRaw(participantPath + "/" + oldUid, token);
+          if (!sourceParticipant) continue;
+          const targetParticipant = await firestoreGetRaw(participantPath + "/" + newUid, token);
+          if (targetParticipant) throw new Error(code + " ligindeki risk katılımı hedef hesapla çakışıyor.");
+          const participantFields = cloneFields(sourceParticipant);
+          setRawString(participantFields, "uid", newUid);
+          writes.push(writeCreate(participantPath + "/" + newUid, participantFields));
+          writes.push(writeDelete(sourceParticipant));
+          movedRisks++;
+        }
+      }
+
+      // Sezon onur köşesindeki geçmiş şampiyon/sonuncu kimliklerini ve anlık kayıtları taşı.
+      const honorDocs = await firestoreListRaw("groups/" + code + "/seasonHonor", token);
+      for (const honor of honorDocs) {
+        const honorId = honor.name.split("/").pop();
+        const honorFields = cloneFields(honor);
+        const changedPaths = [];
+        for (const key of ["winnerIds", "lastIds", "memberIds"]) {
+          if (replaceUidInArrayField(honorFields, key, oldUid, newUid)) changedPaths.push(key);
+        }
+        if (changedPaths.length) writes.push(writePatch(honor, Object.fromEntries(changedPaths.map(key => [key, honorFields[key]])), changedPaths));
+
+        const sourceMember = await firestoreGetRaw("groups/" + code + "/seasonHonor/" + honorId + "/members/" + oldUid, token);
+        if (sourceMember) {
+          const targetMember = await firestoreGetRaw("groups/" + code + "/seasonHonor/" + honorId + "/members/" + newUid, token);
+          if (targetMember) throw new Error(code + " sezon onur kaydında hedef oyuncu zaten bulunuyor.");
+          const memberFields = cloneFields(sourceMember);
+          setRawString(memberFields, "playerId", newUid);
+          writes.push(writeCreate("groups/" + code + "/seasonHonor/" + honorId + "/members/" + newUid, memberFields));
+          writes.push(writeDelete(sourceMember));
+          movedSeasonRecords++;
+        }
+      }
+    }
+
+    // Profil fotoğrafı ve diğer oyuncu tercihlerini koru.
+    const oldProfile = await firestoreGetRaw("users/" + oldUid, token);
+    if (oldProfile) {
+      writes.push(writeCreate("users/" + newUid, cloneFields(oldProfile)));
+      writes.push(writeDelete(oldProfile));
+    }
+
+    // Eski tarayıcının push tokenini yeni tarayıcıya taşımıyoruz; Chrome kendi tokenini kaydedecek.
+    const oldPushToken = await firestoreGetRaw("pushTokens/" + oldUid, token);
+    if (oldPushToken) writes.push(writeDelete(oldPushToken));
+
+    if (writes.length + 1 > MAX_TRANSFER_WRITES) {
+      throw new Error("Hesabın çok fazla geçmiş kaydı içeriyor. Güvenli tek seferlik aktarım sınırı aşıldı; yönetici yardımı gerekiyor.");
+    }
+
+    // Kodun kullanılması ve tüm veri değişiklikleri aynı atomik Firestore işlemiyle kaydedilir.
+    const transferFields = cloneFields(transfer);
+    setRawBoolean(transferFields, "used", true);
+    setRawString(transferFields, "usedBy", newUid);
+    transferFields.usedAt = { timestampValue: new Date().toISOString() };
+    writes.push({
+      update: { name: transfer.name, fields: transferFields },
+      currentDocument: transfer.updateTime ? { updateTime: transfer.updateTime } : { exists: true }
+    });
+
+    await firestoreCommit(writes, token);
+    return json({
+      ok: true,
+      groupCodes: transferredGroups,
+      moved: {
+        predictions: movedPredictions,
+        bonuses: movedBonuses,
+        riskParticipations: movedRisks,
+        seasonRecords: movedSeasonRecords
+      }
+    });
+  } catch (error) {
+    return transferJsonError(error, 400);
+  }
+}
 
 async function handleNotification(request, env) {
   try {
