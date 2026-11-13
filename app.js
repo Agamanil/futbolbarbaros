@@ -2030,6 +2030,98 @@ $('nameForm').addEventListener('submit', async e => {
   }
 });
 
+
+async function callAccountTransferWorker(action, extra = {}) {
+  if (!authUser) throw new Error("Firebase oturumu henüz hazır değil.");
+  const idToken = await getIdToken(authUser);
+  const response = await fetch(ESPN_LOOKUP_ENDPOINT, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action, idToken, ...extra })
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok || !result.ok) {
+    throw new Error(result.error || "Hesap aktarım isteği başarısız oldu.");
+  }
+  return result;
+}
+
+$('showRestoreAccountButton')?.addEventListener('click', () => {
+  $('restoreAccountForm')?.classList.toggle('hidden');
+  $('restoreAccountCode')?.focus();
+});
+
+$('restoreAccountForm')?.addEventListener('submit', async event => {
+  event.preventDefault();
+  const button = $('restoreAccountSubmit');
+  const status = $('restoreAccountMessage');
+  const code = $('restoreAccountCode').value.trim().toUpperCase();
+  if (!code) return;
+  if (!confirm("Bu tarayıcıdaki boş anonim hesap, eski hesabının verileriyle değiştirilecek. Devam edilsin mi?")) return;
+
+  button.disabled = true;
+  message(status, "Eski hesabın doğrulanıyor ve kayıtların aktarılıyor...", false);
+  try {
+    const result = await callAccountTransferWorker("redeemAccountTransfer", { code });
+    localStorage.setItem("fb_leagues", JSON.stringify(result.groupCodes || []));
+    const moved = result.moved || {};
+    message(
+      status,
+      "Hesabın aktarıldı. Lig: " + (result.groupCodes || []).length +
+      " · Tahmin: " + (moved.predictions || 0) +
+      " · Bonus: " + (moved.bonuses || 0) +
+      " · Risk katılımı: " + (moved.riskParticipations || 0) +
+      ". Sayfa yenileniyor...",
+      false
+    );
+    setTimeout(() => location.reload(), 1200);
+  } catch (error) {
+    console.error("Hesap aktarımı:", error);
+    message(status, error.message || "Hesap aktarılamadı.");
+  } finally {
+    button.disabled = false;
+  }
+});
+
+$('createAccountTransferButton')?.addEventListener('click', async () => {
+  const button = $('createAccountTransferButton');
+  const status = $('accountTransferMessage');
+  const resultBox = $('accountTransferResult');
+  button.disabled = true;
+  resultBox.classList.add('hidden');
+  message(status, "Güvenli aktarım kodun oluşturuluyor...", false);
+  try {
+    const result = await callAccountTransferWorker("createAccountTransfer");
+    $('accountTransferCode').value = result.code;
+    resultBox.classList.remove('hidden');
+    message(status, "Kod oluşturuldu. 24 saat içinde yeni tarayıcıda kullan ve kimseyle paylaşma.", false);
+  } catch (error) {
+    console.error("Aktarım kodu oluşturma:", error);
+    message(status, error.message || "Aktarım kodu oluşturulamadı.");
+  } finally {
+    button.disabled = false;
+  }
+});
+
+$('copyAccountTransferCodeButton')?.addEventListener('click', async () => {
+  const input = $('accountTransferCode');
+  const status = $('accountTransferMessage');
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(input.value);
+    } else {
+      input.focus();
+      input.select();
+      if (!document.execCommand("copy")) throw new Error("Kopyalama desteklenmiyor.");
+    }
+    message(status, "Aktarım kodu kopyalandı. Güvenli bir yerde sakla.", false);
+  } catch (error) {
+    input.focus();
+    input.select();
+    message(status, "Kod seçildi. Cihazının Kopyala komutunu kullan.");
+  }
+});
+
 $('leaveButton').addEventListener('click', () => {
   if (confirm('Bu cihazdaki kayıtlı lig oturumlarını sıfırlamak istiyor musun?')) {
     localStorage.removeItem('fb_leagues');
