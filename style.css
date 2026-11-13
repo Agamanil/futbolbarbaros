@@ -726,3 +726,113 @@ select option {
   font-weight: 800;
   margin-left: 3px;
 }
+
+
+/* GÜNLÜK BONUS HAKKI VE GÜNLÜK BAŞARI ROZETLERİ */
+
+.daily-bonus-panel {
+  margin: 18px 0 24px;
+  border-color: rgba(240, 202, 98, 0.28);
+  background: linear-gradient(145deg, #162c20, #10251b);
+}
+
+.daily-bonus-panel h3 {
+  margin-bottom: 10px;
+  color: #f0ca62;
+}
+
+.daily-bonus-intro {
+  color: var(--muted);
+  line-height: 1.65;
+  max-width: 850px;
+}
+
+.daily-bonus-rules {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  gap: 10px;
+  margin: 18px 0;
+}
+
+.daily-bonus-rules > div {
+  display: grid;
+  gap: 5px;
+  padding: 13px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: rgba(255,255,255,0.035);
+}
+
+.daily-bonus-rules strong {
+  color: #f0ca62;
+  font-size: 0.9rem;
+}
+
+.daily-bonus-rules span {
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.daily-bonus-panel #dailyBonusAwardLabel {
+  max-width: 520px;
+  margin-top: 14px;
+}
+
+.daily-bonus-panel #seasonBonusChoices {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.season-player-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 7px;
+}
+
+.season-player-name {
+  font-weight: 700;
+}
+
+.season-player-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.daily-award-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  line-height: 1.35;
+  white-space: normal;
+}
+
+.daily-award-first {
+  color: #ffe39a;
+  background: rgba(240, 202, 98, 0.12);
+  border-color: rgba(240, 202, 98, 0.32);
+}
+
+.daily-award-last {
+  color: #ffb4b4;
+  background: rgba(255, 98, 98, 0.1);
+  border-color: rgba(255, 98, 98, 0.26);
+}
+
+@media (max-width: 650px) {
+  .daily-bonus-panel {
+    padding: 19px;
+  }
+
+  .daily-award-badge {
+    font-size: 0.64rem;
+  }
+}
