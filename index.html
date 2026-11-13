@@ -175,15 +175,33 @@
         <h4>Günlük puan durumu</h4>
         <div id="dailySummary" class="season-day-grid" aria-live="polite"></div>
 
-        <hr class="season-divider">
+      </section>
 
-        <h4>Yarının bonus maçını seç</h4>
+      <section class="card daily-bonus-panel" id="dailyBonusPanel">
+        <div class="season-kicker">GÜNLÜK ÖDÜL SİSTEMİ</div>
+        <h3>🏅 Günün Sonuncusu Bonus Hakkı</h3>
+        <p class="daily-bonus-intro">
+          Her günün maçları ve etkinlik puanları kesinleştiğinde günlük puan tablosunun birincisi ve sonuncusu belirlenir.
+          Günün sonuncusu, hakkını kazandığı andan itibaren 48 saat içinde bir bonus maç seçebilir.
+        </p>
+
+        <div class="daily-bonus-rules">
+          <div><strong>🏁 Hak sahibi</strong><span>Yalnızca günün sonuncusu maç seçebilir. Eşitlik varsa sonuncu sırayı paylaşan oyuncuların tamamı hak kazanır.</span></div>
+          <div><strong>⏳ 48 saat</strong><span>Hakkın süresi günlük sonuçlar ve risk etkinlikleri kesinleştiği anda başlar.</span></div>
+          <div><strong>⚽ Maç şartı</strong><span>Yalnızca henüz başlamamış ve sonucu girilmemiş maçlar seçilebilir.</span></div>
+          <div><strong>⭐ Çifte puan</strong><span>Seçilen maçta doğru tahmin yapan herkes normal puanın iki katını alır.</span></div>
+          <div><strong>🔁 Sıra kuralı</strong><span>Aynı oyuncu art arda iki takvim gününde seçim yapamaz. Her lig kendi içinde hesaplanır.</span></div>
+        </div>
+
         <p id="seasonBonusStatus" class="season-muted" aria-live="polite">Bonus bilgileri yükleniyor...</p>
+        <label id="dailyBonusAwardLabel" for="dailyBonusAwardSelect" hidden>
+          Kullanacağın günlük sonuncu hakkı
+          <select id="dailyBonusAwardSelect"></select>
+        </label>
         <div id="seasonBonusChoices"></div>
 
         <hr class="season-divider">
-
-        <h4>Bugünün bonus maçları</h4>
+        <h4>Yaklaşan bonus maçlar</h4>
         <div id="seasonSelectedBonuses"></div>
       </section>
 
@@ -327,9 +345,14 @@
         <h3>Yönetici Paneli</h3>
       </div>
       <section class="card admin-card" id="manualBonusAdminCard">
-        <h4>Sonuncu Yerine Bonus Maç Seç</h4>
-        <p class="match-meta">Sonuncu oyuncu hesabına erişemiyorsa, bugünün sonuçları kesinleştikten sonra yarının bonus maçını yönetici olarak seçebilirsin. Bu işlem oyuncuların art arda seçim yapma kuralını değiştirmez.</p>
-        <label for="manualBonusMatchSelect">Yarının bonus maçı
+        <h4>Günün Sonuncusu Yerine Bonus Maç Seç</h4>
+        <p class="match-meta">Hesabına erişilemeyen günün sonuncusu adına, hakkın 48 saatlik süresi dolmadan henüz başlamamış bir maç seçebilirsin. Her seçim günlük hak sahibine yazılır.</p>
+        <label for="manualBonusAwardSelect">Hakkı kullanılacak oyuncu
+          <select id="manualBonusAwardSelect" disabled>
+            <option value="">Günlük haklar yükleniyor...</option>
+          </select>
+        </label>
+        <label for="manualBonusMatchSelect">Bonus maçı
           <select id="manualBonusMatchSelect" disabled>
             <option value="">Maçlar yükleniyor...</option>
           </select>
