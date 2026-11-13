@@ -201,6 +201,9 @@ function transferJsonError(error, status = 400) {
 async function handleCreateAccountTransfer(body, env) {
   try {
     const oldUid = await verifyFirebaseIdToken(body.idToken);
+    if (oldUid === FIREBASE_ADMIN_UID) {
+      return json({ ok: false, error: "Yönetici hesabı aktarım koduyla taşınamaz; yönetici yetkisi sabit UID'ye bağlı." }, 403);
+    }
     const token = await getTransferAccessToken(env);
     if (await isAccountRestricted(oldUid, token)) {
       return json({ ok: false, error: "Kısıtlı hesaplar için aktarım kodu oluşturulamıyor." }, 403);
@@ -256,6 +259,9 @@ function replaceUidInArrayField(fields, key, oldUid, newUid) {
 async function handleRedeemAccountTransfer(body, env) {
   try {
     const newUid = await verifyFirebaseIdToken(body.idToken);
+    if (newUid === FIREBASE_ADMIN_UID) {
+      return json({ ok: false, error: "Yönetici oturumu başka bir oyuncu hesabına aktarılamaz." }, 403);
+    }
     const hash = await transferCodeHash(body.code);
     const token = await getTransferAccessToken(env);
     const transfer = await firestoreGetRaw(TRANSFER_COLLECTION + "/" + hash, token);
