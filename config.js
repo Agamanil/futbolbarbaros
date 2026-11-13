@@ -11,4 +11,7 @@ export const firebaseConfig = {
 
 // İlk anonim girişten sonra kendi UID'ni buraya yazacağız.
 export const ADMIN_UID = 'MUxQ8O20qXa5DzWB7LTMMjilJ0Y2';
+
+// Firebase Cloud Messaging Web Push public VAPID key.
+export const firebaseVapidKey = 'BA4tZ_DV-QggZGZqmDIWH7lJ-WFd7_XLPCPcOxdjdXCfacuKAxSlNN6qCvTZqpnpR6t3iPT0sBtAIxWngm4K3ms';
 export const DEFAULT_GROUP_CODE = 'BARBAROS26';
