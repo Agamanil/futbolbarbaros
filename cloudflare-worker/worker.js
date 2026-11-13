@@ -1,3 +1,4 @@
+
 const SITE_ORIGIN = 'https://agamanil.github.io';
 const FIREBASE_PROJECT_ID = 'futbolbarbarosdenemesi';
 const FIREBASE_API_KEY = 'AIzaSyCNpVWp9mughfYhzxV-93xaJ8O7rr_SOGY';
@@ -151,12 +152,18 @@ function setRawString(fields, key, value) {
 function setRawBoolean(fields, key, value) {
   fields[key] = { booleanValue: value };
 }
+
+/* DÜZELTİLDİ: Firestore commit için tam URL değil, resource name kullanılır. */
 function writeCreate(path, fields) {
   return {
-    update: { name: "projects/" + FIREBASE_PROJECT_ID + "/databases/(default)/documents/" + firestorePath(path), fields },
+    update: {
+      name: "projects/" + FIREBASE_PROJECT_ID + "/databases/(default)/documents/" + firestorePath(path),
+      fields
+    },
     currentDocument: { exists: false }
   };
 }
+
 function writeDelete(document) {
   return {
     delete: document.name,
