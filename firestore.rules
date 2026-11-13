@@ -180,7 +180,7 @@ service cloud.firestore {
         ) || (isMember(groupId)
           && request.resource.data.keys().hasAll([
             'uid', 'playerName', 'matchId', 'homeTeam', 'awayTeam',
-            'selectionDay', 'targetDate', 'selectedAt'
+            'selectionDay', 'earnedDate', 'targetDate', 'selectedAt'
           ])
           && request.resource.data.keys().hasOnly([
             'uid', 'playerName', 'matchId', 'homeTeam', 'awayTeam',
