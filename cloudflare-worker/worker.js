@@ -153,7 +153,7 @@ function setRawBoolean(fields, key, value) {
 }
 function writeCreate(path, fields) {
   return {
-    update: { name: firestoreDocumentUrl(path), fields },
+    update: { name: "projects/" + FIREBASE_PROJECT_ID + "/databases/(default)/documents/" + firestorePath(path), fields },
     currentDocument: { exists: false }
   };
 }
