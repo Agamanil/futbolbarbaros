@@ -31,6 +31,7 @@ let groupGeneration = 0;
 window.FUTBOLBARBAROS_RISK_READY = false;
 window.FUTBOLBARBAROS_RISK_POINTS = riskPointsFor;
 window.FUTBOLBARBAROS_RISK_PENDING = riskPendingFor;
+window.FUTBOLBARBAROS_RISK_FINALIZED_AT = riskFinalizedAtFor;
 
 const isAdmin = () => Boolean(uid) && uid === ADMIN_UID;
 const riskKey = (matchId, riskId) => `${matchId}__${riskId}`;
@@ -79,6 +80,16 @@ function riskPendingFor(matchIds) {
   if (!matchIds) return 0;
   const ids = matchIds instanceof Set ? matchIds : new Set(matchIds);
   return [...riskEvents.values()].filter(item => ids.has(item.matchId) && item.status === 'open').length;
+}
+
+function riskFinalizedAtFor(matchIds) {
+  if (!matchIds) return null;
+  const ids = matchIds instanceof Set ? matchIds : new Set(matchIds);
+  const times = [...riskEvents.values()]
+    .filter(item => ids.has(item.matchId) && item.status === 'resolved')
+    .map(item => asDate(item.resolvedAt)?.getTime())
+    .filter(Number.isFinite);
+  return times.length ? Math.max(...times) : null;
 }
 
 function notifyRiskUpdate() {
