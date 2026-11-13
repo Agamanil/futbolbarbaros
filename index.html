@@ -138,6 +138,7 @@
       </div>
       <div class="header-right">
         <button type="button" id="profileAvatarButton" class="profile-avatar-trigger" title="Profil fotoğrafını değiştir" aria-label="Profil fotoğrafını değiştir"><span class="player-avatar avatar-fallback">⚽</span></button>
+        <button type="button" id="enableNotificationsButton" class="small-btn" title="Tarayıcı bildirimlerini etkinleştir">🔔 Bildirimleri aç</button>
         <span id="userBadge" class="badge hidden"></span>
         <button id="editNameButton" class="small-btn">İsim Değiştir</button>
         <button id="leaveButton" class="danger-btn">Oturumu Sıfırla</button>
@@ -344,6 +345,26 @@
       <div class="section-header">
         <h3>Yönetici Paneli</h3>
       </div>
+      <section class="card admin-card" id="pushNotificationAdminCard">
+        <h4>🔔 Bildirim Gönder</h4>
+        <p class="match-meta">Bildirim izni vermiş kullanıcılara duyuru gönder. Kullanıcıların tarayıcı izni olmadan bildirim gönderilemez.</p>
+        <label for="pushNotificationTarget">Alıcılar
+          <select id="pushNotificationTarget">
+            <option value="all">Tüm liglerdeki kullanıcılar</option>
+            <option value="BARBAROS26">BARBAROS26</option>
+            <option value="ILOVE12CBRO">ILOVE12CBRO</option>
+            <option value="HALILPERION">HALILPERION</option>
+          </select>
+        </label>
+        <label for="pushNotificationTitle">Bildirim başlığı
+          <input id="pushNotificationTitle" type="text" maxlength="80" placeholder="Örn. Günün sonuncusu belli oldu">
+        </label>
+        <label for="pushNotificationBody">Bildirim mesajı
+          <textarea id="pushNotificationBody" rows="3" maxlength="220" placeholder="Bildirim mesajını yaz..."></textarea>
+        </label>
+        <button type="button" class="primary-btn" id="sendPushNotificationButton">Bildirimi gönder</button>
+        <div id="pushNotificationMessage" class="message" aria-live="polite"></div>
+      </section>
       <section class="card admin-card" id="manualBonusAdminCard">
         <h4>Günün Sonuncusu Yerine Bonus Maç Seç</h4>
         <p class="match-meta">Hesabına erişilemeyen günün sonuncusu adına, hakkın 48 saatlik süresi dolmadan henüz başlamamış bir maç seçebilirsin. Her seçim günlük hak sahibine yazılır.</p>
