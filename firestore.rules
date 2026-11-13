@@ -217,6 +217,31 @@ service cloud.firestore {
       }
     }
 
+    // Web push cihaz kayitlari: kullanici yalnizca kendi cihaz tokenini yazabilir.
+    // Yonetici bildirim gonderimi icin tum tokenlari okuyabilir.
+    match /pushTokens/{userId} {
+      allow get: if isAdmin() || (canUseSite() && request.auth.uid == userId);
+      allow list: if isAdmin();
+      allow create, update: if canUseSite()
+        && request.auth.uid == userId
+        && request.resource.data.keys().hasAll([
+          'uid', 'token', 'groupCodes', 'playerName', 'updatedAt'
+        ])
+        && request.resource.data.keys().hasOnly([
+          'uid', 'token', 'groupCodes', 'playerName', 'updatedAt'
+        ])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.token is string
+        && request.resource.data.token.size() >= 100
+        && request.resource.data.token.size() <= 4096
+        && request.resource.data.groupCodes is list
+        && request.resource.data.groupCodes.size() <= 20
+        && request.resource.data.playerName is string
+        && request.resource.data.playerName.size() <= 18
+        && request.resource.data.updatedAt == request.time;
+      allow delete: if isAdmin() || (canUseSite() && request.auth.uid == userId);
+    }
+
     // Site genelindeki kalıcı ban ve timeout kayıtları.
     match /userModeration/{userId} {
       allow get: if signedIn() && (request.auth.uid == userId || isAdmin());
