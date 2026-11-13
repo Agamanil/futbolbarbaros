@@ -2047,7 +2047,7 @@ async function callAccountTransferWorker(action, extra = {}) {
 }
 
 $('showRestoreAccountButton')?.addEventListener('click', () => {
-  $('restoreAccountForm')?.classList.toggle('hidden');
+  $('restoreAccountForm')?.classList.remove('hidden');
   $('restoreAccountCode')?.focus();
 });
 
