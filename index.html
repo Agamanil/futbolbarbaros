@@ -124,6 +124,17 @@
         <button type="submit" class="primary-btn">Lige Giriş Yap</button>
       </form>
       <div id="entryMessage" class="message"></div>
+
+      <div style="margin-top:18px;border-top:1px solid #ffffff1c;padding-top:15px;">
+        <button type="button" id="showRestoreAccountButton" class="secondary-btn">Daha önce oynuyordum</button>
+        <form id="restoreAccountForm" class="hidden" style="margin-top:14px;">
+          <label for="restoreAccountCode">Eski hesabının aktarım kodu</label>
+          <input type="text" id="restoreAccountCode" placeholder="FB-XXXXXXXX-XXXXXXXX-XXXXXXXX-XXXXXXXX" autocomplete="off" autocapitalize="characters" spellcheck="false" required>
+          <button type="submit" id="restoreAccountSubmit" class="primary-btn">Eski Hesabımı Getir</button>
+          <p class="match-meta">Aktarım kodu eski tarayıcıdaki hesabının en alt bölümünden oluşturulur. Kod tek kullanımlıktır.</p>
+          <div id="restoreAccountMessage" class="message"></div>
+        </form>
+      </div>
     </div>
   </div>
 
@@ -499,6 +510,21 @@
       <div id="adminMatches" class="matches-grid"></div>
     </main>
   </div>
+
+  <!-- Hesap aktarım kodu: sayfanın en altında -->
+  <footer id="accountTransferFooter" class="container">
+    <div class="card">
+      <h3>Hesap Aktarımı</h3>
+      <p class="match-meta">Başka bir tarayıcıya geçeceksen burada tek kullanımlık aktarım kodu oluştur. Kodunu kimseyle paylaşma; bu kod hesabına erişim sağlar.</p>
+      <button type="button" id="createAccountTransferButton" class="secondary-btn">Hesap Aktarım Kodumu Göster</button>
+      <div id="accountTransferResult" class="hidden" style="margin-top:12px;">
+        <label for="accountTransferCode">Aktarım kodun · 24 saat geçerli</label>
+        <input type="text" id="accountTransferCode" readonly autocomplete="off" spellcheck="false">
+        <button type="button" id="copyAccountTransferCodeButton" class="primary-btn" style="margin-top:8px;">Kodu Kopyala</button>
+      </div>
+      <div id="accountTransferMessage" class="message"></div>
+    </div>
+  </footer>
 
   <!-- Profil fotoğrafı seçme penceresi -->
   <dialog id="avatarDialog" class="modal">
