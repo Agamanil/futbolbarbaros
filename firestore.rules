@@ -160,14 +160,19 @@ service cloud.firestore {
           isAdmin()
           && request.resource.data.keys().hasAll([
             'uid', 'playerName', 'matchId', 'homeTeam', 'awayTeam',
-            'selectionDay', 'targetDate', 'seasonId', 'selectedAt', 'manual', 'manualBy'
+            'selectionDay', 'earnedDate', 'targetDate', 'seasonId', 'selectedAt', 'manual', 'manualBy'
           ])
           && request.resource.data.keys().hasOnly([
             'uid', 'playerName', 'matchId', 'homeTeam', 'awayTeam',
-            'selectionDay', 'targetDate', 'seasonId', 'selectedAt', 'manual', 'manualBy'
+            'selectionDay', 'earnedDate', 'targetDate', 'seasonId', 'selectedAt', 'manual', 'manualBy'
           ])
           && request.resource.data.manual == true
           && request.resource.data.manualBy == request.auth.uid
+          && request.resource.data.selectionDay is string
+          && request.resource.data.earnedDate is string
+          && request.resource.data.targetDate is string
+          && request.resource.data.uid is string
+          && request.resource.data.playerName is string
           && request.resource.data.selectedAt == request.time
           && request.resource.data.matchId is string
           && matchExists(groupId, request.resource.data.matchId)
@@ -179,9 +184,12 @@ service cloud.firestore {
           ])
           && request.resource.data.keys().hasOnly([
             'uid', 'playerName', 'matchId', 'homeTeam', 'awayTeam',
-            'selectionDay', 'targetDate', 'selectedAt'
+            'selectionDay', 'earnedDate', 'targetDate', 'selectedAt'
           ])
           && request.resource.data.uid == request.auth.uid
+          && request.resource.data.selectionDay is string
+          && request.resource.data.earnedDate is string
+          && request.resource.data.targetDate is string
           && request.resource.data.selectedAt == request.time
           && request.resource.data.matchId is string
           && matchExists(groupId, request.resource.data.matchId)
