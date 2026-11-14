@@ -4,14 +4,14 @@ name: FUTBOLBARBAROS ESPN Canli Skor
 on:
   workflow_dispatch:
   schedule:
-  - cron: '*/5 16-21 * * *'
+  - cron: '*/1 16-21 * * *'
 
 permissions:
   contents: read
 
 concurrency:
   group: futbolbarbaros-espn-live-scores
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   update-scores:
@@ -26,8 +26,16 @@ jobs:
         with:
           node-version: 22
 
+      - name: npm önbelleğini yükle
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-futbolbarbaros-firebase-admin-v13
+          restore-keys: |
+            ${{ runner.os }}-futbolbarbaros-firebase-admin-
+
       - name: Firebase Admin SDK kur
-        run: npm install --no-save firebase-admin@13
+        run: npm install --no-save --prefer-offline --no-audit --no-fund firebase-admin@13
 
       - name: ESPN skorlarini Firestore'a yaz
         env:
