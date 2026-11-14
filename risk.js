@@ -4,7 +4,7 @@ import { getApp, getApps, initializeApp } from 'https://www.gstatic.com/firebase
 import { getAuth, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/13.2.0/firebase-auth.js';
 import {
   getFirestore, doc, getDoc, getDocs, setDoc, updateDoc, collection,
-  onSnapshot, orderBy, query, runTransaction, serverTimestamp
+  onSnapshot, orderBy, query, runTransaction, serverTimestamp, writeBatch
 } from 'https://www.gstatic.com/firebasejs/13.2.0/firebase-firestore.js';
 import { subscribeSharedSnapshot } from './shared-firestore-listeners.js';
 import { firebaseConfig, ADMIN_UID } from './config.js';
@@ -189,7 +189,10 @@ function subscribeToMatchRisks(matchId, isInitialGroupLoad) {
 }
 
 function syncMatchRiskListeners(nextMatches) {
-  const ids = new Set(nextMatches.map(item => item.id));
+  // Yeni maçlarda boş Risk alt koleksiyonu dinleme. Eski kayıtlarda alan
+  // bulunmuyorsa geriye dönük uyumluluk için dinlemeyi sürdür.
+  const eligibleMatches = nextMatches.filter(item => item.hasRiskEvents !== false);
+  const ids = new Set(eligibleMatches.map(item => item.id));
   for (const [matchId, unsubscribe] of [...matchRiskUnsubs.entries()]) {
     if (!ids.has(matchId)) {
       unsubscribe();
@@ -203,7 +206,7 @@ function syncMatchRiskListeners(nextMatches) {
       }
     }
   }
-  for (const match of nextMatches) subscribeToMatchRisks(match.id, !initialMatchListLoaded);
+  for (const match of eligibleMatches) subscribeToMatchRisks(match.id, !initialMatchListLoaded);
   if (!initialMatchListLoaded) {
     initialMatchListLoaded = true;
     markRiskReady();
@@ -486,7 +489,8 @@ async function createRisk(matchId, button) {
   button.disabled = true;
   try {
     const ref = doc(collection(db, 'groups', groupCode, 'matches', matchId, 'risks'));
-    await setDoc(ref, {
+    const batch = writeBatch(db);
+    batch.set(ref, {
       matchId,
       question,
       plusPoints,
@@ -495,6 +499,9 @@ async function createRisk(matchId, button) {
       createdAt: serverTimestamp(),
       createdBy: uid
     });
+    // Bu alan sayesinde yeni maçlarda boş Risk koleksiyonu dinlenmez.
+    batch.update(matchPath(groupCode, matchId), { hasRiskEvents: true });
+    await batch.commit();
     article.querySelector('[data-risk-question]').value = '';
     alert('Risk etkinliği oluşturuldu ve maçın altında yayınlandı.');
   } catch (error) {
