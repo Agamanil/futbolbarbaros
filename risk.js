@@ -4,8 +4,9 @@ import { getApp, getApps, initializeApp } from 'https://www.gstatic.com/firebase
 import { getAuth, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/13.2.0/firebase-auth.js';
 import {
   getFirestore, doc, getDoc, getDocs, setDoc, updateDoc, collection,
-  onSnapshot, runTransaction, serverTimestamp
+  onSnapshot, orderBy, query, runTransaction, serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/13.2.0/firebase-firestore.js';
+import { subscribeSharedSnapshot } from './shared-firestore-listeners.js';
 import { firebaseConfig, ADMIN_UID } from './config.js';
 
 const $ = id => document.getElementById(id);
@@ -131,7 +132,7 @@ function subscribeToParticipants(matchId, eventDoc, isInitialGroupLoad) {
   if (participantUnsubs.has(key)) return;
   if (isInitialGroupLoad) initialPendingParticipantKeys.add(key);
   let firstSnapshot = true;
-  const unsubscribe = onSnapshot(participantsPath(groupCode, matchId, eventDoc.id), snapshot => {
+  const unsubscribe = subscribeSharedSnapshot(db, `groups/${groupCode}/matches/${matchId}/risks/${eventDoc.id}/participants`, participantsPath(groupCode, matchId, eventDoc.id), snapshot => {
     const latest = riskEvents.get(key);
     if (latest) {
       latest.participants = snapshot.docs.map(item => ({ id: item.id, ...item.data() }));
@@ -158,7 +159,7 @@ function subscribeToMatchRisks(matchId, isInitialGroupLoad) {
   if (matchRiskUnsubs.has(matchId)) return;
   if (isInitialGroupLoad) initialPendingMatchIds.add(matchId);
   let firstSnapshot = true;
-  const unsubscribe = onSnapshot(risksPath(groupCode, matchId), snapshot => {
+  const unsubscribe = subscribeSharedSnapshot(db, `groups/${groupCode}/matches/${matchId}/risks`, risksPath(groupCode, matchId), snapshot => {
     const currentKeys = new Set(snapshot.docs.map(item => riskKey(matchId, item.id)));
     for (const [key, event] of [...riskEvents.entries()]) {
       if (event.matchId === matchId && !currentKeys.has(key)) {
@@ -224,7 +225,7 @@ async function attachGroup(code) {
     }
     playerName = playerSnap.data().name || 'Oyuncu';
 
-    unsubMatches = onSnapshot(collection(db, 'groups', code, 'matches'), snapshot => {
+    unsubMatches = subscribeSharedSnapshot(db, `groups/${code}/matches:by-kickoff`, query(collection(db, 'groups', code, 'matches'), orderBy('kickoff', 'asc')), snapshot => {
       if (generation !== groupGeneration) return;
       matches = snapshot.docs.map(item => ({ id: item.id, ...item.data() }));
       syncMatchRiskListeners(matches);
