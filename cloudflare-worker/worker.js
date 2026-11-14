@@ -1028,7 +1028,7 @@ async function runAutomaticNotifications(env) {
     hourCycle: "h23"
   }).format(new Date()));
 
-  if (istanbulHour < 19 && istanbulHour >= 2) return;
+  if (istanbulHour >= 2 && istanbulHour < 19) return;
 
   if (!env.FIREBASE_SERVICE_ACCOUNT) {
     return console.error("FIREBASE_SERVICE_ACCOUNT secret eksik.");
@@ -1144,63 +1144,63 @@ async function runAutomaticNotifications(env) {
           const players = await fsList("groups/" + encodeURIComponent(code) + "/players", accessToken);
 
           if (players.length) {
-          const riskPoints = await getRiskPoints(code, matches, accessToken);
-          const bonusIds = new Set(bonuses.map(b => b.matchId));
-
-          const standings = players.map(player => {
-            let pts = riskPoints.get(player.id) || 0;
-
-            for (const match of matches) {
-              if (!finished(match)) continue;
-
-              const prediction = match.predictions && match.predictions[player.id];
-              if (!prediction) continue;
-
-              const exact =
-                prediction.home === match.homeScore &&
-                prediction.away === match.awayScore;
-
-              const same =
-                Math.sign(match.homeScore - match.awayScore) ===
-                Math.sign(prediction.home - prediction.away);
-
-              pts += (exact ? 3 : same ? 1 : 0) *
-                (bonusIds.has(match.id) ? 2 : 1);
-            }
-
-            return { id: player.id, name: player.name, pts };
-          });
-
-          const lowest = Math.min(...standings.map(p => p.pts));
-          const yesterday = previousDay(today);
-
-          const selectedYesterday = new Set(
-            bonuses.filter(b => b.selectionDay === yesterday).map(b => b.uid)
-          );
-
-          const eligible = standings.filter(
-            p => p.pts === lowest && !selectedYesterday.has(p.id)
-          );
-
-          const ids = new Set(eligible.map(p => p.id));
-
-          const personalTokens = tokens
-            .filter(x => x.token && ids.has(x.uid) &&
-              Array.isArray(x.groupCodes) && x.groupCodes.includes(code))
-            .map(x => x.token);
-
-          if (eligible.length) {
-            await sendAuto(
-              personalTokens,
-              "📉 Günün sonuncusu belli oldu!",
-              "Sonuncu: " +
-              eligible.map(p => p.name || "Oyuncu").join(", ") +
-              ". Yarın için bonus maç seçme hakkı sende!",
-              accessToken
+            const riskPoints = await getRiskPoints(code, matches, accessToken);
+            const bonusIds = new Set(bonuses.map(b => b.matchId));
+  
+            const standings = players.map(player => {
+              let pts = riskPoints.get(player.id) || 0;
+  
+              for (const match of matches) {
+                if (!finished(match)) continue;
+  
+                const prediction = match.predictions && match.predictions[player.id];
+                if (!prediction) continue;
+  
+                const exact =
+                  prediction.home === match.homeScore &&
+                  prediction.away === match.awayScore;
+  
+                const same =
+                  Math.sign(match.homeScore - match.awayScore) ===
+                  Math.sign(prediction.home - prediction.away);
+  
+                pts += (exact ? 3 : same ? 1 : 0) *
+                  (bonusIds.has(match.id) ? 2 : 1);
+              }
+  
+              return { id: player.id, name: player.name, pts };
+            });
+  
+            const lowest = Math.min(...standings.map(p => p.pts));
+            const yesterday = previousDay(today);
+  
+            const selectedYesterday = new Set(
+              bonuses.filter(b => b.selectionDay === yesterday).map(b => b.uid)
             );
-          }
-
-          lastPlaceDay = today;
+  
+            const eligible = standings.filter(
+              p => p.pts === lowest && !selectedYesterday.has(p.id)
+            );
+  
+            const ids = new Set(eligible.map(p => p.id));
+  
+            const personalTokens = tokens
+              .filter(x => x.token && ids.has(x.uid) &&
+                Array.isArray(x.groupCodes) && x.groupCodes.includes(code))
+              .map(x => x.token);
+  
+            if (eligible.length) {
+              await sendAuto(
+                personalTokens,
+                "📉 Günün sonuncusu belli oldu!",
+                "Sonuncu: " +
+                eligible.map(p => p.name || "Oyuncu").join(", ") +
+                ". Yarın için bonus maç seçme hakkı sende!",
+                accessToken
+              );
+            }
+  
+            lastPlaceDay = today;
           }
         }
 
