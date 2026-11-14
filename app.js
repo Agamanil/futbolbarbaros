@@ -1140,7 +1140,8 @@ $('matchForm').addEventListener('submit', async e => {
       predictionCloseAt: Timestamp.fromDate(predictionCloseAt),
       createdAt: serverTimestamp(),
       createdBy: uid,
-      predictions: {}
+      predictions: {},
+      hasRiskEvents: false
     });
     e.target.reset();
     fetchedEspnMatch = null;
@@ -1876,6 +1877,8 @@ if (copySelectedMatchesBtn) {
 
           delete data.id;
           delete data.predictions;
+          // Risk alt koleksiyonları kopyalanmadığı için hedef maç başlangıçta boş kabul edilir.
+          data.hasRiskEvents = false;
 
           await setDoc(targetRef, data);
           copied++;
