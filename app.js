@@ -419,7 +419,25 @@ function renderLeagueOptions() {
 async function loadLeagueCatalog() {
   if (!isAdmin()) return;
 
-  const snap = await getDocs(collection(db, 'groups'));
+  let snap = await getDocs(collection(db, 'groups'));
+  const existingCodes = new Set(snap.docs.map(item => item.id));
+  const missingLeagues = KNOWN_LEAGUES.filter(item => !existingCodes.has(item.code));
+
+  // Bilinen ligleri aynı tek koleksiyon okumasından sonra yalnızca eksiklerse oluştur.
+  for (const league of missingLeagues) {
+    await setDoc(doc(db, 'groups', league.code), {
+      code: league.code,
+      name: league.label,
+      createdAt: serverTimestamp(),
+      createdBy: uid
+    });
+  }
+
+  // Yalnızca ilk kurulumda eksik lig oluşturulduysa listeyi bir kez yenile.
+  if (missingLeagues.length) {
+    snap = await getDocs(collection(db, 'groups'));
+  }
+
   leagueCatalog = snap.docs.map(item => ({
     code: item.id,
     name: item.data().name || item.id
@@ -495,25 +513,6 @@ function renderLeagueManager() {
   `).join('');
 }
 
-/* Yönetici giriş yaptığında eksik bilinen ligleri oluşturur. */
-async function ensureKnownLeagueDocs() {
-  if (!isAdmin()) return;
-
-  for (const league of KNOWN_LEAGUES) {
-    const ref = doc(db, 'groups', league.code);
-    const snap = await getDoc(ref);
-
-    if (!snap.exists()) {
-      await setDoc(ref, {
-        code: league.code,
-        name: league.label,
-        createdAt: serverTimestamp(),
-        createdBy: uid
-      });
-    }
-  }
-}
-
 function showApp() {
   $('entryView').classList.add('hidden');
   $('appView').classList.remove('hidden');
@@ -540,21 +539,22 @@ function activateTab(name) {
   });
 }
 
-async function switchLeague(code) {
+async function switchLeague(code, cachedPlayerData = null) {
   if (!code) return;
 
   const [snap, groupSnap] = await Promise.all([
-    getDoc(doc(db, 'groups', code, 'players', uid)),
+    cachedPlayerData ? Promise.resolve(null) : getDoc(doc(db, 'groups', code, 'players', uid)),
     getDoc(doc(db, 'groups', code))
   ]);
 
-  if (!snap.exists()) {
+  const playerData = cachedPlayerData || (snap?.exists() ? snap.data() : null);
+  if (!playerData) {
     throw new Error('Bu ligde oyuncu kaydın bulunamadı.');
   }
 
   leagueNames[code] = groupSnap.exists() ? (groupSnap.data().name || code) : code;
   groupCode = code;
-  player = { ...snap.data(), uid };
+  player = { ...playerData, uid };
 
   if (!memberships.includes(code)) {
     memberships.push(code);
@@ -637,7 +637,6 @@ async function boot() {
 
   if (isAdmin()) {
     try {
-      await ensureKnownLeagueDocs();
       await loadLeagueCatalog();
     } catch (err) {
       console.error('Ligler hazırlanamadı:', err);
@@ -667,8 +666,11 @@ async function restoreSession() {
 
   // Kayıtlı ligler + bilinen ligler: localStorage silinmiş olsa bile
   // Firestore'daki oyuncu kaydından kullanıcı yeniden tanınır.
-  const candidates = [...new Set([...savedCodes, ...KNOWN_LEAGUE_CODES])];
+  // Kayıtlı ligler mevcutsa yalnızca onları doğrula. Bilinen liglerde arama,
+  // localStorage tamamen boşsa eski oturumu kurtarmak için kullanılır.
+  const candidates = savedCodes.length ? savedCodes : KNOWN_LEAGUE_CODES;
   const valid = [];
+  const validPlayerData = new Map();
 
   for (const code of candidates) {
     try {
@@ -676,6 +678,7 @@ async function restoreSession() {
 
       if (snap.exists()) {
         valid.push(code);
+        validPlayerData.set(code, snap.data());
       }
     } catch (err) {
       // Geçici hata (ağ, izin vb.) yüzünden kayıtlı ligi SİLME.
@@ -695,7 +698,7 @@ async function restoreSession() {
 
   for (const code of memberships) {
     try {
-      await switchLeague(code);
+      await switchLeague(code, validPlayerData.get(code));
       entered = true;
       break;
     } catch (err) {
