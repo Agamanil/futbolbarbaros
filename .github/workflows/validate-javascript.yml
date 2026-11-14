@@ -22,7 +22,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for source in app.js cloudflare-worker/worker.js season.js risk.js moderation.js firebase-messaging-sw.js config.js; do
+          for source in app.js cloudflare-worker/worker.js season.js risk.js moderation.js shared-firestore-listeners.js scripts/espn-live-scores.mjs firebase-messaging-sw.js config.js; do
             cp "$source" /tmp/futbolbarbaros-check.mjs
             node --check /tmp/futbolbarbaros-check.mjs
             echo "OK: $source"
