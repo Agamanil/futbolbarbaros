@@ -13,8 +13,9 @@ const LEAGUES = [
   { code: 'uefa.nations', names: ['nations league', 'uluslar ligi'] }
 ];
 
-const WINDOW_PAST_HOURS = 8;
-const WINDOW_FUTURE_MINUTES = 45;
+// Yalnızca maç başlangıcına yakın ve hâlâ sonuçlanmamış olabilecek maçları tara.
+const WINDOW_PAST_MINUTES = 180;
+const WINDOW_FUTURE_MINUTES = 10;
 const TIMEOUT_MS = 15000;
 
 function normalize(value) {
@@ -281,41 +282,69 @@ async function fetchEvent(espnId, competition, savedCode) {
   return null;
 }
 
+function sameFirestoreValue(left, right) {
+  if (left === right) return true;
+  if (left == null || right == null) return false;
+  if (typeof left === 'object' || typeof right === 'object') {
+    try {
+      return JSON.stringify(left) === JSON.stringify(right);
+    } catch {
+      return false;
+    }
+  }
+  return false;
+}
+
 async function updateMatch(ref, current, event) {
-  const update = {
+  const desired = {
     espnLeagueCode: event.league,
     espnState: event.state || (event.completed ? 'post' : 'unknown'),
     espnStatus: event.statusText || '',
     espnClock: event.clock || '',
-    espnPeriod: event.period,
-    espnUpdatedAt: admin.firestore.FieldValue.serverTimestamp()
+    espnPeriod: event.period
   };
 
-  if (Array.isArray(event.keyEvents) && event.keyEvents.length > 0) {
-    update.espnKeyEvents = event.keyEvents;
-    update.espnKeyEventsUpdatedAt = admin.firestore.FieldValue.serverTimestamp();
+  if (Array.isArray(event.keyEvents) && event.keyEvents.length > 0 &&
+      !sameFirestoreValue(current.espnKeyEvents || [], event.keyEvents)) {
+    desired.espnKeyEvents = event.keyEvents;
+    desired.espnKeyEventsUpdatedAt = admin.firestore.FieldValue.serverTimestamp();
   }
 
   if (event.state === 'in' && event.homeScore !== null && event.awayScore !== null) {
-    update.liveHomeScore = event.homeScore;
-    update.liveAwayScore = event.awayScore;
+    desired.liveHomeScore = event.homeScore;
+    desired.liveAwayScore = event.awayScore;
   }
 
   if (event.completed && event.homeScore !== null && event.awayScore !== null) {
-    update.homeScore = event.homeScore;
-    update.awayScore = event.awayScore;
-    update.liveHomeScore = event.homeScore;
-    update.liveAwayScore = event.awayScore;
-    update.espnState = 'post';
-    update.espnStatus = event.statusText || 'Final';
-    update.scoreSource = 'espn';
+    desired.homeScore = event.homeScore;
+    desired.awayScore = event.awayScore;
+    desired.liveHomeScore = event.homeScore;
+    desired.liveAwayScore = event.awayScore;
+    desired.espnState = 'post';
+    desired.espnStatus = event.statusText || 'Final';
+    desired.scoreSource = 'espn';
 
     if (current.homeScore === undefined || current.awayScore === undefined) {
-      update.resultAt = admin.firestore.FieldValue.serverTimestamp();
+      desired.resultAt = admin.firestore.FieldValue.serverTimestamp();
     }
   }
 
+  const update = {};
+  for (const [field, value] of Object.entries(desired)) {
+    if (field.endsWith('UpdatedAt') || field === 'resultAt') {
+      update[field] = value;
+    } else if (!sameFirestoreValue(current[field], value)) {
+      update[field] = value;
+    }
+  }
+
+  // Her dakikada aynı içeriği tekrar yazma. Bu, tüm açık istemcilere
+  // gereksiz belge güncellemesi ve tekrar okuma olarak yansır.
+  if (!Object.keys(update).length) return false;
+
+  update.espnUpdatedAt = admin.firestore.FieldValue.serverTimestamp();
   await ref.update(update);
+  return true;
 }
 
 async function main() {
@@ -335,10 +364,15 @@ async function main() {
 
   const db = admin.firestore();
   const now = Date.now();
-  const minTime = now - WINDOW_PAST_HOURS * 60 * 60 * 1000;
+  const minTime = now - WINDOW_PAST_MINUTES * 60 * 1000;
   const maxTime = now + WINDOW_FUTURE_MINUTES * 60 * 1000;
+  const minKickoff = admin.firestore.Timestamp.fromMillis(minTime);
+  const maxKickoff = admin.firestore.Timestamp.fromMillis(maxTime);
 
+  // Ligleri dinamik tutuyoruz; fakat her ligdeki bütün fikstürü indirmek yerine
+  // yalnızca son 3 saat + gelecek 10 dakika aralığındaki maçları sorguluyoruz.
   const groupsSnapshot = await db.collection('groups').get();
+  const eventCache = new Map();
 
   let checked = 0;
   let updated = 0;
@@ -346,26 +380,29 @@ async function main() {
   let skipped = 0;
 
   for (const groupDoc of groupsSnapshot.docs) {
-    const matchesSnapshot = await groupDoc.ref.collection('matches').get();
+    const matchesSnapshot = await groupDoc.ref.collection('matches')
+      .where('kickoff', '>=', minKickoff)
+      .where('kickoff', '<=', maxKickoff)
+      .get();
 
     for (const matchDoc of matchesSnapshot.docs) {
       const match = matchDoc.data();
 
-      if (!match.espnId || !/^\d{5,20}$/.test(String(match.espnId))) continue;
+      if (!match.espnId || !/^\\d{5,20}$/.test(String(match.espnId))) continue;
 
       const kickoffMs = toMillis(match.kickoff);
-
-      if (!Number.isFinite(kickoffMs) || kickoffMs < minTime || kickoffMs > maxTime) {
-        continue;
-      }
+      if (!Number.isFinite(kickoffMs) || kickoffMs < minTime || kickoffMs > maxTime) continue;
 
       checked++;
 
-      const event = await fetchEvent(
-        String(match.espnId),
-        match.competition,
-        match.espnLeagueCode
-      );
+      const espnId = String(match.espnId);
+      let event;
+      if (eventCache.has(espnId)) {
+        event = eventCache.get(espnId);
+      } else {
+        event = await fetchEvent(espnId, match.competition, match.espnLeagueCode);
+        eventCache.set(espnId, event);
+      }
 
       if (!event) {
         skipped++;
@@ -377,22 +414,28 @@ async function main() {
 
       if (event.homeScore === null || event.awayScore === null) {
         if (event.state === 'pre') {
-          await matchDoc.ref.update({
+          const desired = {
             espnLeagueCode: event.league,
             espnState: 'pre',
-            espnStatus: event.statusText || 'Scheduled',
-            espnUpdatedAt: admin.firestore.FieldValue.serverTimestamp()
-          });
-          updated++;
+            espnStatus: event.statusText || 'Scheduled'
+          };
+          const patch = {};
+          for (const [field, value] of Object.entries(desired)) {
+            if (!sameFirestoreValue(match[field], value)) patch[field] = value;
+          }
+          if (Object.keys(patch).length) {
+            patch.espnUpdatedAt = admin.firestore.FieldValue.serverTimestamp();
+            await matchDoc.ref.update(patch);
+            updated++;
+          }
         } else {
           skipped++;
         }
         continue;
       }
 
-      await updateMatch(matchDoc.ref, match, event);
-      updated++;
-
+      const didUpdate = await updateMatch(matchDoc.ref, match, event);
+      if (didUpdate) updated++;
       if (event.completed) finished++;
 
       console.log(
@@ -410,10 +453,9 @@ async function main() {
 
   console.log('--- FUTBOLBARBAROS ESPN ÖZET ---');
   console.log(
-    `Grup: ${groupsSnapshot.size} | Kontrol edilen maç: ${checked} | Güncellenen: ${updated} | Biten: ${finished} | Eşleşmeyen/atlanan: ${skipped}`
+    `Grup: ${groupsSnapshot.size} | Aralıkta bulunan maç: ${checked} | Yazılan: ${updated} | Biten: ${finished} | Eşleşmeyen/atlanan: ${skipped}`
   );
 }
-
 main().catch(error => {
   console.error('CANLI SKOR MOTORU HATASI:', error);
   process.exitCode = 1;
