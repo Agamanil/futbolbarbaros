@@ -1020,6 +1020,16 @@ async function getRiskPoints(code, matches, token) {
 }
 
 async function runAutomaticNotifications(env) {
+  // Bildirim taramasini yalnizca maclarin yogun oldugu Istanbul saatlerinde calistir.
+  // Cloudflare cron'u daha sik tetiklense bile bu saatler disinda Firestore okunmaz.
+  const istanbulHour = Number(new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Istanbul",
+    hour: "2-digit",
+    hourCycle: "h23"
+  }).format(new Date()));
+
+  if (istanbulHour < 19 && istanbulHour >= 2) return;
+
   if (!env.FIREBASE_SERVICE_ACCOUNT) {
     return console.error("FIREBASE_SERVICE_ACCOUNT secret eksik.");
   }
@@ -1045,16 +1055,19 @@ async function runAutomaticNotifications(env) {
       const code = group.id;
 
       try {
-        const [matches, players, bonuses, oldState] = await Promise.all([
-          fsList("groups/" + encodeURIComponent(code) + "/matches", accessToken),
-          fsList("groups/" + encodeURIComponent(code) + "/players", accessToken),
-          fsList("groups/" + encodeURIComponent(code) + "/bonusSelections", accessToken),
-          fsGet("notificationState/" + encodeURIComponent(code), accessToken)
-        ]);
-
+        // Bu ligde push bildirimi alacak cihaz yoksa alt koleksiyonlari tarama.
         const groupTokens = tokens
           .filter(x => x.token && Array.isArray(x.groupCodes) && x.groupCodes.includes(code))
           .map(x => x.token);
+
+        if (!groupTokens.length) continue;
+
+        // Oyuncular yalnizca gunun sonuncusu hesaplanacagi zaman okunacak.
+        const [matches, bonuses, oldState] = await Promise.all([
+          fsList("groups/" + encodeURIComponent(code) + "/matches", accessToken),
+          fsList("groups/" + encodeURIComponent(code) + "/bonusSelections", accessToken),
+          fsGet("notificationState/" + encodeURIComponent(code), accessToken)
+        ]);
 
         const starts = new Set(
           Array.isArray(oldState && oldState.sentStarts)
@@ -1127,7 +1140,10 @@ async function runAutomaticNotifications(env) {
           localDay(new Date(fsTime(m.kickoff))) === today
         );
 
-        if (todayMatches.length && todayMatches.every(finished) && lastPlaceDay !== today && players.length) {
+        if (todayMatches.length && todayMatches.every(finished) && lastPlaceDay !== today) {
+          const players = await fsList("groups/" + encodeURIComponent(code) + "/players", accessToken);
+
+          if (players.length) {
           const riskPoints = await getRiskPoints(code, matches, accessToken);
           const bonusIds = new Set(bonuses.map(b => b.matchId));
 
@@ -1185,6 +1201,7 @@ async function runAutomaticNotifications(env) {
           }
 
           lastPlaceDay = today;
+          }
         }
 
         await fsSaveState(code, {
