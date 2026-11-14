@@ -457,6 +457,16 @@ async function main() {
   );
 }
 main().catch(error => {
+  const quotaExhausted = error?.code === 8 ||
+    error?.code === 'resource-exhausted' ||
+    /quota exceeded|resource_exhausted/i.test(error?.message || '');
+
+  if (quotaExhausted) {
+    console.warn('Firestore kotası dolu. Bu turda canlı skor güncellemesi atlandı; kota yenilendiğinde otomatik devam eder.');
+    process.exitCode = 0;
+    return;
+  }
+
   console.error('CANLI SKOR MOTORU HATASI:', error);
   process.exitCode = 1;
 });
