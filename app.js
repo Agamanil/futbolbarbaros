@@ -9,6 +9,7 @@ import {
   query, orderBy, onSnapshot, updateDoc, deleteDoc, serverTimestamp, Timestamp
 } from 'https://www.gstatic.com/firebasejs/13.2.0/firebase-firestore.js';
 import { firebaseConfig, ADMIN_UID, firebaseVapidKey } from './config.js';
+import { subscribeSharedSnapshot } from './shared-firestore-listeners.js';
 
 const $ = id => document.getElementById(id);
 const hasConfig = Boolean(firebaseConfig?.apiKey && firebaseConfig?.projectId);
@@ -622,13 +623,13 @@ async function boot() {
   console.info('FUTBOLBARBAROS Firebase UID:', uid);
   console.info('FUTBOLBARBAROS yönetici hesabı:', isAdmin() ? 'EVET' : 'HAYIR');
 
-  unsubAvatars = onSnapshot(collection(db, 'avatars'), snap => {
+  unsubAvatars = subscribeSharedSnapshot(db, 'global:avatars', collection(db, 'avatars'), snap => {
     avatars = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     renderAvatarUI();
     renderTable();
   }, err => console.error('Avatar galerisi okunamadı:', err));
 
-  unsubProfiles = onSnapshot(collection(db, 'users'), snap => {
+  unsubProfiles = subscribeSharedSnapshot(db, 'global:users', collection(db, 'users'), snap => {
     userProfiles = Object.fromEntries(snap.docs.map(d => [d.id, d.data()]));
     renderAvatarUI();
     renderTable();
@@ -863,7 +864,9 @@ function listen() {
 
   if (!groupCode) return;
 
-  unsubMatches = onSnapshot(
+  unsubMatches = subscribeSharedSnapshot(
+    db,
+    `groups/${groupCode}/matches:by-kickoff`,
     query(
       collection(db, 'groups', groupCode, 'matches'),
       orderBy('kickoff', 'asc')
@@ -882,7 +885,9 @@ function listen() {
     err => console.error('Maç dinleme hatası:', err)
   );
 
-  unsubPlayers = onSnapshot(
+  unsubPlayers = subscribeSharedSnapshot(
+    db,
+    `groups/${groupCode}/players`,
     collection(db, 'groups', groupCode, 'players'),
     snap => {
       players = snap.docs.map(d => ({
@@ -896,7 +901,9 @@ function listen() {
     err => console.error('Oyuncu dinleme hatası:', err)
   );
 
-  unsubBonusSelections = onSnapshot(
+  unsubBonusSelections = subscribeSharedSnapshot(
+    db,
+    `groups/${groupCode}/bonusSelections`,
     collection(db, 'groups', groupCode, 'bonusSelections'),
     snap => {
       bonusSelections = snap.docs.map(d => ({
