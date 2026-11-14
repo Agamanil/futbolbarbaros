@@ -5,8 +5,9 @@ import { getApp, getApps, initializeApp } from 'https://www.gstatic.com/firebase
 import { getAuth, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/13.2.0/firebase-auth.js';
 import {
   getFirestore, doc, getDoc, getDocs, setDoc, updateDoc, collection,
-  onSnapshot, serverTimestamp, runTransaction, writeBatch
+  onSnapshot, orderBy, query, serverTimestamp, runTransaction, writeBatch
 } from 'https://www.gstatic.com/firebasejs/13.2.0/firebase-firestore.js';
+import { subscribeSharedSnapshot } from './shared-firestore-listeners.js';
 import { firebaseConfig, ADMIN_UID } from './config.js';
 
 const TIME_ZONE = 'Europe/Istanbul';
@@ -1152,17 +1153,17 @@ async function attachLeague(code) {
       renderAll();
     }, error => console.error('Sezon listesi okunamadı:', error));
 
-    unsubMatches = onSnapshot(collection(db, 'groups', code, 'matches'), snapshot => {
+    unsubMatches = subscribeSharedSnapshot(db, `groups/${code}/matches:by-kickoff`, query(collection(db, 'groups', code, 'matches'), orderBy('kickoff', 'asc')), snapshot => {
       matches = snapshot.docs.map(item => ({ id: item.id, ...item.data() }));
       renderAll();
     }, error => console.error('Sezon maçları okunamadı:', error));
 
-    unsubPlayers = onSnapshot(collection(db, 'groups', code, 'players'), snapshot => {
+    unsubPlayers = subscribeSharedSnapshot(db, `groups/${code}/players`, collection(db, 'groups', code, 'players'), snapshot => {
       players = snapshot.docs.map(item => ({ id: item.id, ...item.data() }));
       renderAll();
     }, error => console.error('Sezon oyuncuları okunamadı:', error));
 
-    unsubBonuses = onSnapshot(collection(db, 'groups', code, 'bonusSelections'), snapshot => {
+    unsubBonuses = subscribeSharedSnapshot(db, `groups/${code}/bonusSelections`, collection(db, 'groups', code, 'bonusSelections'), snapshot => {
       bonusSelections = snapshot.docs.map(item => ({ id: item.id, ...item.data() }));
       renderAll();
     }, error => {
@@ -1376,13 +1377,13 @@ onAuthStateChanged(auth, user => {
     return;
   }
 
-  unsubProfiles = onSnapshot(collection(db, 'users'), snapshot => {
+  unsubProfiles = subscribeSharedSnapshot(db, 'global:users', collection(db, 'users'), snapshot => {
     userProfiles = Object.fromEntries(snapshot.docs.map(item => [item.id, item.data()]));
     profilesLoaded = true;
     renderAll();
   }, error => console.error('Profil fotoğrafları okunamadı:', error));
 
-  unsubAvatars = onSnapshot(collection(db, 'avatars'), snapshot => {
+  unsubAvatars = subscribeSharedSnapshot(db, 'global:avatars', collection(db, 'avatars'), snapshot => {
     avatarGallery = snapshot.docs.map(item => ({ id: item.id, ...item.data() }));
     avatarsLoaded = true;
     renderAll();
