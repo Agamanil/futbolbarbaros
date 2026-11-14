@@ -3,9 +3,10 @@
 import { getApp, getApps, initializeApp } from 'https://www.gstatic.com/firebasejs/13.2.0/firebase-app.js';
 import { getAuth, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/13.2.0/firebase-auth.js';
 import {
-  getFirestore, doc, getDoc, getDocs, setDoc, deleteDoc, updateDoc,
-  collection, onSnapshot, serverTimestamp, Timestamp, deleteField
+  getFirestore, doc, getDoc, setDoc, deleteDoc, updateDoc,
+  collection, onSnapshot, orderBy, query, serverTimestamp, Timestamp, deleteField
 } from 'https://www.gstatic.com/firebasejs/13.2.0/firebase-firestore.js';
+import { subscribeSharedSnapshot } from './shared-firestore-listeners.js';
 import { firebaseConfig, ADMIN_UID } from './config.js';
 
 const $ = id => document.getElementById(id);
@@ -134,29 +135,20 @@ async function attachGroup(code) {
   groupCode = code;
   if (!uid || !code || !isAdmin()) return;
   try {
-    const [playerSnap, matchSnap, bonusSnap] = await Promise.all([
-      getDocs(collection(db, 'groups', code, 'players')),
-      getDocs(collection(db, 'groups', code, 'matches')),
-      getDocs(collection(db, 'groups', code, 'bonusSelections'))
-    ]);
-    if (currentGeneration !== generation) return;
-    players = playerSnap.docs.map(item => ({ id: item.id, ...item.data() }));
-    matches = matchSnap.docs.map(item => ({ id: item.id, ...item.data() }));
-    bonusSelections = bonusSnap.docs.map(item => ({ id: item.id, ...item.data() }));
-    renderUserManagement();
-
-    unsubPlayers = onSnapshot(collection(db, 'groups', code, 'players'), snapshot => {
+    unsubPlayers = subscribeSharedSnapshot(db, `groups/${code}/players`, collection(db, 'groups', code, 'players'), snapshot => {
       if (currentGeneration !== generation) return;
       players = snapshot.docs.map(item => ({ id: item.id, ...item.data() }));
       renderUserManagement();
     }, error => console.error('Oyuncu listesi okunamadi:', error));
-    unsubMatches = onSnapshot(collection(db, 'groups', code, 'matches'), snapshot => {
+    unsubMatches = subscribeSharedSnapshot(db, `groups/${code}/matches:by-kickoff`, query(collection(db, 'groups', code, 'matches'), orderBy('kickoff', 'asc')), snapshot => {
       if (currentGeneration !== generation) return;
       matches = snapshot.docs.map(item => ({ id: item.id, ...item.data() }));
+      renderUserManagement();
     }, error => console.error('Moderasyon maclari okunamadi:', error));
-    unsubBonuses = onSnapshot(collection(db, 'groups', code, 'bonusSelections'), snapshot => {
+    unsubBonuses = subscribeSharedSnapshot(db, `groups/${code}/bonusSelections`, collection(db, 'groups', code, 'bonusSelections'), snapshot => {
       if (currentGeneration !== generation) return;
       bonusSelections = snapshot.docs.map(item => ({ id: item.id, ...item.data() }));
+      renderUserManagement();
     }, error => console.error('Moderasyon bonus secimleri okunamadi:', error));
   } catch (error) {
     console.error('Kullanici yonetimi acilamadi:', error);
