@@ -4,9 +4,9 @@ name: FUTBOLBARBAROS ESPN Canli Skor
 on:
   workflow_dispatch:
   schedule:
-  - cron: '*/1 16-21 * * *'
-  # Her gün 11.00 Türkiye saati: geçmiş maçlarda eksik kalan sonuçları bir kez tamamla.
-  - cron: '0 8 * * *'
+    - cron: '*/1 16-21 * * *'
+    # Her gün 11.00 Türkiye saati: geçmiş maçlarda eksik kalan sonuçları bir kez tamamla.
+    - cron: '0 8 * * *'
 
 permissions:
   contents: read
