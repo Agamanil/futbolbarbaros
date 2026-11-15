@@ -403,7 +403,7 @@ async function main() {
       const match = matchDoc.data();
 
       if (historicalBackfill && match.homeScore !== undefined && match.awayScore !== undefined) continue;
-      if (!match.espnId || !/^\\d{5,20}$/.test(String(match.espnId))) continue;
+      if (!match.espnId || !/^\d{5,20}$/.test(String(match.espnId))) continue;
 
       const kickoffMs = toMillis(match.kickoff);
       if (!Number.isFinite(kickoffMs)) continue;
