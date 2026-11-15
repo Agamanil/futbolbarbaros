@@ -14,8 +14,8 @@ const LEAGUES = [
 ];
 
 // Yalnızca maç başlangıcına yakın ve hâlâ sonuçlanmamış olabilecek maçları tara.
-const WINDOW_PAST_MINUTES = 180;
-const WINDOW_FUTURE_MINUTES = 10;
+const WINDOW_PAST_MINUTES = 480;
+const WINDOW_FUTURE_MINUTES = 45;
 const HISTORICAL_LOOKBACK_DAYS = 14;
 const TIMEOUT_MS = 15000;
 
