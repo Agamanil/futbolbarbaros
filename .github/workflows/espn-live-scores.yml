@@ -5,6 +5,8 @@ on:
   workflow_dispatch:
   schedule:
   - cron: '*/1 16-21 * * *'
+  # Her gün 11.00 Türkiye saati: geçmiş maçlarda eksik kalan sonuçları bir kez tamamla.
+  - cron: '0 8 * * *'
 
 permissions:
   contents: read
@@ -40,4 +42,5 @@ jobs:
       - name: ESPN skorlarini Firestore'a yaz
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          HISTORICAL_BACKFILL: ${{ github.event.schedule == '0 8 * * *' && 'true' || 'false' }}
         run: node scripts/espn-live-scores.mjs
