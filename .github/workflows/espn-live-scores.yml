@@ -3,6 +3,10 @@ name: FUTBOLBARBAROS ESPN Canli Skor
 
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - 'scripts/espn-live-scores.mjs'
+      - '.github/workflows/espn-live-scores.yml'
   schedule:
     - cron: '*/1 16-21 * * *'
     # Her gün 11.00 Türkiye saati: geçmiş maçlarda eksik kalan sonuçları bir kez tamamla.
