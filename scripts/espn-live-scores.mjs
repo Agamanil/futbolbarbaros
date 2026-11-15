@@ -16,6 +16,7 @@ const LEAGUES = [
 // Yalnızca maç başlangıcına yakın ve hâlâ sonuçlanmamış olabilecek maçları tara.
 const WINDOW_PAST_MINUTES = 180;
 const WINDOW_FUTURE_MINUTES = 10;
+const HISTORICAL_LOOKBACK_DAYS = 14;
 const TIMEOUT_MS = 15000;
 
 function normalize(value) {
@@ -368,9 +369,13 @@ async function main() {
   const maxTime = now + WINDOW_FUTURE_MINUTES * 60 * 1000;
   const minKickoff = admin.firestore.Timestamp.fromMillis(minTime);
   const maxKickoff = admin.firestore.Timestamp.fromMillis(maxTime);
+  const historicalBackfill = process.env.HISTORICAL_BACKFILL === 'true';
+  const historicalMin = admin.firestore.Timestamp.fromMillis(
+    now - HISTORICAL_LOOKBACK_DAYS * 24 * 60 * 60 * 1000
+  );
 
-  // Ligleri dinamik tutuyoruz; fakat her ligdeki bütün fikstürü indirmek yerine
-  // yalnızca son 3 saat + gelecek 10 dakika aralığındaki maçları sorguluyoruz.
+  // Normal dakikalık çalışmada yalnızca canlı/başlamak üzere olan maçları tara.
+  // Günlük backfill çalışmasında son 14 gündeki maçlardan sonucu eksik olanları tamamla.
   const groupsSnapshot = await db.collection('groups').get();
   const eventCache = new Map();
 
@@ -380,18 +385,29 @@ async function main() {
   let skipped = 0;
 
   for (const groupDoc of groupsSnapshot.docs) {
-    const matchesSnapshot = await groupDoc.ref.collection('matches')
-      .where('kickoff', '>=', minKickoff)
-      .where('kickoff', '<=', maxKickoff)
-      .get();
+    let matchesQuery = groupDoc.ref.collection('matches');
+
+    if (historicalBackfill) {
+      matchesQuery = matchesQuery
+        .where('kickoff', '>=', historicalMin)
+        .where('kickoff', '<', minKickoff);
+    } else {
+      matchesQuery = matchesQuery
+        .where('kickoff', '>=', minKickoff)
+        .where('kickoff', '<=', maxKickoff);
+    }
+
+    const matchesSnapshot = await matchesQuery.get();
 
     for (const matchDoc of matchesSnapshot.docs) {
       const match = matchDoc.data();
 
+      if (historicalBackfill && match.homeScore !== undefined && match.awayScore !== undefined) continue;
       if (!match.espnId || !/^\\d{5,20}$/.test(String(match.espnId))) continue;
 
       const kickoffMs = toMillis(match.kickoff);
-      if (!Number.isFinite(kickoffMs) || kickoffMs < minTime || kickoffMs > maxTime) continue;
+      if (!Number.isFinite(kickoffMs)) continue;
+      if (historicalBackfill ? (kickoffMs >= minTime || kickoffMs < historicalMin.toMillis()) : (kickoffMs < minTime || kickoffMs > maxTime)) continue;
 
       checked++;
 
@@ -453,7 +469,7 @@ async function main() {
 
   console.log('--- FUTBOLBARBAROS ESPN ÖZET ---');
   console.log(
-    `Grup: ${groupsSnapshot.size} | Aralıkta bulunan maç: ${checked} | Yazılan: ${updated} | Biten: ${finished} | Eşleşmeyen/atlanan: ${skipped}`
+    `Mod: ${historicalBackfill ? '14 günlük geçmiş sonuç tamamlama' : 'canlı skor'} | Grup: ${groupsSnapshot.size} | Aralıkta bulunan maç: ${checked} | Yazılan: ${updated} | Biten: ${finished} | Eşleşmeyen/atlanan: ${skipped}`
   );
 }
 main().catch(error => {
