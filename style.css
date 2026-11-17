@@ -836,3 +836,48 @@ select option {
     font-size: 0.64rem;
   }
 }
+
+
+/* OYUNCU PROFİLLERİ */
+.player-profile-link { border: 0; padding: 0; background: transparent; color: var(--text); font-weight: 800; text-align: left; }
+.player-profile-link:hover { color: var(--green); text-decoration: underline; }
+.player-profiles-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr)); gap: 12px; }
+.player-profile-card { display: flex; flex-direction: column; align-items: center; gap: 8px; min-width: 0; padding: 18px 12px; border: 1px solid var(--border); border-radius: 14px; background: linear-gradient(145deg, #142d20, #102319); color: var(--text); }
+.player-profile-card:hover { border-color: var(--green); transform: translateY(-2px); }
+.player-profile-card strong { overflow-wrap: anywhere; text-align: center; }
+.player-profile-card-meta { color: var(--muted); font-size: .78rem; }
+.player-profile-card-avatar { display: flex; justify-content: center; }
+.player-profile-modal-heading { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; }
+.profile-large-avatar { width: 68px; height: 68px; }
+.player-profile-modal-heading h3 { margin: 0 0 5px; }
+.profile-stats-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+.profile-stat { display: flex; flex-direction: column; gap: 5px; padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: rgba(255,255,255,.035); }
+.profile-stat span { color: var(--muted); font-size: .75rem; }
+.profile-stat strong { color: var(--green); font-size: 1.1rem; }
+
+/* MAÇ TEPKİLERİ */
+.match-reactions { margin-top: 13px; padding-top: 10px; border-top: 1px solid var(--border); }
+.match-reactions-label { display: block; margin-bottom: 7px; color: var(--muted); font-size: .72rem; font-weight: 700; }
+.match-reaction-buttons { display: flex; flex-wrap: wrap; gap: 6px; }
+.reaction-btn { display: inline-flex; align-items: center; gap: 5px; padding: 6px 9px; border: 1px solid var(--border); border-radius: 999px; background: #091a11; color: var(--text); font-size: .85rem; }
+.reaction-btn span { color: var(--muted); font-size: .7rem; }
+.reaction-btn.selected { border-color: var(--green); background: rgba(33,196,119,.16); }
+
+/* LİG SOHBETİ */
+.chat-panel { padding: 16px; }
+.chat-messages-list { display: flex; flex-direction: column; gap: 11px; max-height: 520px; min-height: 180px; overflow-y: auto; padding: 5px 2px 14px; }
+.chat-message { display: flex; align-items: flex-start; gap: 9px; }
+.chat-message-body { min-width: 0; flex: 1; padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; background: rgba(255,255,255,.035); }
+.chat-message.mine .chat-message-body { border-color: rgba(33,196,119,.28); background: rgba(33,196,119,.07); }
+.chat-message-heading { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 5px; }
+.chat-message-heading strong { color: var(--green); font-size: .82rem; overflow-wrap: anywhere; }
+.chat-message-heading time { color: var(--muted); font-size: .68rem; flex: 0 0 auto; }
+.chat-message-body p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.5; font-size: .9rem; }
+.chat-message-actions { display: flex; gap: 10px; margin-top: 7px; }
+.chat-message-actions button { border: 0; padding: 2px 0; background: transparent; color: var(--muted); font-size: .7rem; text-decoration: underline; }
+.chat-message-actions button:hover { color: var(--red); }
+.chat-form { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 10px; align-items: end; border-top: 1px solid var(--border); padding-top: 13px; }
+.chat-form textarea { width: 100%; min-width: 0; resize: vertical; color: var(--text); background: #091a11; border: 1px solid var(--border); border-radius: 9px; padding: 11px; font: inherit; }
+.chat-form button { min-height: 44px; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+@media (max-width: 650px) { .profile-stats-grid { grid-template-columns: 1fr 1fr; } .chat-form { grid-template-columns: 1fr; } .chat-form button { width: 100%; } }
