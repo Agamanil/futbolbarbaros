@@ -90,9 +90,31 @@ service cloud.firestore {
           && request.resource.data.text is string
           && request.resource.data.text.size() >= 1
           && request.resource.data.text.size() <= 500
-          && request.resource.data.createdAt == request.time;
+          && request.resource.data.createdAt == request.time
+          && getAfter(/databases/$(database)/documents/groups/$(groupId)/chatRateLimits/$(request.auth.uid)).data.lastSentAt == request.time;
         allow delete: if isAdmin() || (isMember(groupId) && resource.data.uid == request.auth.uid);
         allow update: if false;
+      }
+
+
+      match /chatRateLimits/{playerId} {
+        allow get: if isAdmin() || (isMember(groupId) && request.auth.uid == playerId);
+        allow list: if isAdmin();
+        allow create: if isMember(groupId)
+          && playerId == request.auth.uid
+          && request.resource.data.keys().hasAll(['uid', 'lastSentAt'])
+          && request.resource.data.keys().hasOnly(['uid', 'lastSentAt'])
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.lastSentAt == request.time;
+        allow update: if isMember(groupId)
+          && playerId == request.auth.uid
+          && request.resource.data.keys().hasAll(['uid', 'lastSentAt'])
+          && request.resource.data.keys().hasOnly(['uid', 'lastSentAt'])
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.lastSentAt == request.time
+          && resource.data.lastSentAt is timestamp
+          && resource.data.lastSentAt <= request.time - duration.value(2, 's');
+        allow delete: if false;
       }
 
       match /chatMutes/{playerId} {
