@@ -169,6 +169,9 @@
     <nav class="tabs">
       <button class="tab active" data-tab="matches">Maçlar & Tahminler</button>
       <button class="tab" data-tab="table">Puan Tablosu</button>
+      <button class="tab" data-tab="players">Oyuncular</button>
+      <button class="tab" data-tab="chat">Lig Sohbeti</button>
+      <button class="tab" data-tab="honor">Onur Duvarı</button>
       <button class="tab admin-only hidden" data-tab="admin">Yönetim Paneli</button>
     </nav>
 
@@ -255,8 +258,61 @@
         </table>
       </div>
 
+
+
+      <div class="section-header" style="margin-top:28px;">
+        <h3>Genel Puan Tablosu</h3>
+      </div>
+
+      <div class="table-card">
+        <table class="leaderboard-table">
+          <thead>
+            <tr><th>#</th><th>Oyuncu</th><th>Oynanan</th><th>Puan</th></tr>
+          </thead>
+          <tbody id="leaderboard"></tbody>
+        </table>
+      </div>
+
+      <p id="seasonExplanation" class="match-meta" style="margin:8px 2px 18px;">
+        Sezon tablosu seçili sezonun tarih aralığındaki maçları sayar. Genel tablo tüm maçları içerir.
+      </p>
+
+      <div class="card join-another-card">
+        <h4>Başka Bir Lige Katıl</h4>
+        <form id="leagueJoinForm" class="inline-form">
+          <input type="text" id="newLeagueCode" placeholder="Size verilen lig kodu" required autocomplete="off">
+          <button type="submit" class="primary-btn">Katıl</button>
+        </form>
+        <div id="leagueMessage" class="message"></div>
+      </div>
+    </main>
+
+
+    <main id="playersTab" class="tab-content hidden">
+      <div class="section-header"><h3>Oyuncu Profilleri</h3></div>
+      <p class="match-meta">Oyunculara tıklayarak bu ligdeki performanslarını ve başarı istatistiklerini görüntüle.</p>
+      <div id="playerProfilesGrid" class="player-profiles-grid"></div>
+    </main>
+
+    <main id="chatTab" class="tab-content hidden">
+      <div class="section-header"><h3>💬 Lig Sohbeti</h3></div>
+      <p class="match-meta">Bu sohbet yalnızca seçili lig üyelerine açıktır. Son 100 mesaj görüntülenir.</p>
+      <section class="card chat-panel">
+        <div id="chatMessagesList" class="chat-messages-list" aria-live="polite"></div>
+        <form id="chatForm" class="chat-form">
+          <label class="sr-only" for="chatMessageInput">Mesajın</label>
+          <textarea id="chatMessageInput" rows="2" maxlength="500" placeholder="Mesajını yaz... (en fazla 500 karakter)" required></textarea>
+          <button id="chatSendButton" type="submit" class="primary-btn">Gönder</button>
+        </form>
+        <div id="chatStatus" class="message" aria-live="polite"></div>
+      </section>
+    </main>
+
+    <main id="honorTab" class="tab-content hidden">
+      <div class="section-header"><h3>🏆 Sezon Onur Duvarı</h3></div>
+      <p class="match-meta">Seçili sezonun şampiyonları ve sonuncuları burada ölümsüzleşir. Geçmiş sezonları maçlar sekmesindeki sezon listesinden görüntüleyebilirsin.</p>
       <section class="honor-section" id="honorCorner">
-        <div class="honor-heading">🏅 ONUR KÖŞESİ 🏅</div>
+        <div class="honor-heading">🏅 ONUR DUVARI 🏅</div>
         <p id="honorStatus" class="honor-status">Taht ve son sıra, sezon tamamlanınca açıklanacak.</p>
 
         <div class="honor-grid">
@@ -333,32 +389,6 @@
           </article>
         </div>
       </section>
-
-      <div class="section-header" style="margin-top:28px;">
-        <h3>Genel Puan Tablosu</h3>
-      </div>
-
-      <div class="table-card">
-        <table class="leaderboard-table">
-          <thead>
-            <tr><th>#</th><th>Oyuncu</th><th>Oynanan</th><th>Puan</th></tr>
-          </thead>
-          <tbody id="leaderboard"></tbody>
-        </table>
-      </div>
-
-      <p id="seasonExplanation" class="match-meta" style="margin:8px 2px 18px;">
-        Sezon tablosu seçili sezonun tarih aralığındaki maçları sayar. Genel tablo tüm maçları içerir.
-      </p>
-
-      <div class="card join-another-card">
-        <h4>Başka Bir Lige Katıl</h4>
-        <form id="leagueJoinForm" class="inline-form">
-          <input type="text" id="newLeagueCode" placeholder="Size verilen lig kodu" required autocomplete="off">
-          <button type="submit" class="primary-btn">Katıl</button>
-        </form>
-        <div id="leagueMessage" class="message"></div>
-      </div>
     </main>
 
     <!-- Yönetim Paneli Sekmesi -->
@@ -545,6 +575,18 @@
       <div class="modal-actions">
         <button type="button" class="secondary-btn" id="closeAvatarDialog">Kapat</button>
       </div>
+    </div>
+  </dialog>
+
+
+  <dialog id="playerProfileDialog" class="modal profile-modal">
+    <div class="card modal-card">
+      <div class="player-profile-modal-heading">
+        <div id="playerProfileAvatar"></div>
+        <div><h3 id="playerProfileName">Oyuncu</h3><p id="playerProfileLeague" class="match-meta"></p></div>
+      </div>
+      <div id="playerProfileStats" class="profile-stats-grid"></div>
+      <div class="modal-actions"><button type="button" class="secondary-btn" onclick="document.getElementById('playerProfileDialog').close()">Kapat</button></div>
     </div>
   </dialog>
 
