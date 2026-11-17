@@ -5,8 +5,8 @@ import { getAuth, signInAnonymously, onAuthStateChanged, setPersistence, browser
 import { getIdToken } from 'https://www.gstatic.com/firebasejs/13.2.0/firebase-auth.js';
 import { getMessaging, getToken, isSupported, onMessage } from 'https://www.gstatic.com/firebasejs/13.2.0/firebase-messaging.js';
 import {
-  getFirestore, doc, getDoc, setDoc, collection, getDocs,
-  query, orderBy, onSnapshot, updateDoc, deleteDoc, serverTimestamp, Timestamp
+  getFirestore, doc, getDoc, setDoc, addDoc, collection, getDocs,
+  query, orderBy, limit, onSnapshot, updateDoc, deleteDoc, deleteField, serverTimestamp, Timestamp
 } from 'https://www.gstatic.com/firebasejs/13.2.0/firebase-firestore.js';
 import { firebaseConfig, ADMIN_UID, firebaseVapidKey } from './config.js';
 import { subscribeSharedSnapshot } from './shared-firestore-listeners.js';
@@ -30,8 +30,10 @@ let memberships = [], matches = [], players = [], bonusSelections = [], activeMa
 let leagueCatalog = [];
 let leagueNames = {};
 let avatars = [], userProfiles = {};
-let unsubMatches = null, unsubPlayers = null, unsubBonusSelections = null;
+let unsubMatches = null, unsubPlayers = null, unsubBonusSelections = null, unsubChat = null;
 let unsubAvatars = null, unsubProfiles = null;
+let chatMessages = [];
+const MATCH_REACTIONS = ['😂', '😱', '🔥', '💀', '👏', '⚽'];
 
 const isAdmin = () => Boolean(uid) && uid === ADMIN_UID;
 
@@ -534,7 +536,7 @@ function activateTab(name) {
     tab.classList.toggle('active', tab.dataset.tab === name);
   });
 
-  ['matches', 'table', 'admin'].forEach(tab => {
+  ['matches', 'table', 'players', 'chat', 'honor', 'admin'].forEach(tab => {
     $(`${tab}Tab`).classList.toggle('hidden', tab !== name);
   });
 }
@@ -855,15 +857,19 @@ function listen() {
   if (unsubMatches) unsubMatches();
   if (unsubPlayers) unsubPlayers();
   if (unsubBonusSelections) unsubBonusSelections();
+  if (unsubChat) unsubChat();
 
   matches = [];
   players = [];
   bonusSelections = [];
+  chatMessages = [];
 
   renderMatches();
   renderAdminMatches();
   renderTable();
   renderBonusPanel();
+  renderPlayerDirectory();
+  renderChat();
 
   if (!groupCode) return;
 
@@ -931,12 +937,44 @@ function listen() {
   );
 }
 
+  unsubChat = subscribeSharedSnapshot(
+    db,
+    `groups/${groupCode}/chatMessages:latest-100`,
+    query(
+      collection(db, 'groups', groupCode, 'chatMessages'),
+      orderBy('createdAt', 'desc'),
+      limit(100)
+    ),
+    snap => {
+      chatMessages = snap.docs.map(item => ({ id: item.id, ...item.data() })).reverse();
+      renderChat();
+    },
+    error => {
+      console.error('Lig sohbeti okunamadı:', error);
+      message($('chatStatus'), 'Sohbet yüklenemedi. Firestore Rules ayarlarını kontrol et.');
+    }
+  );
+
 function bonusMatchIds() {
   return new Set(
     bonusSelections
       .map(selection => selection.matchId)
       .filter(Boolean)
   );
+}
+
+function matchReactionsMarkup(match) {
+  const reactions = match.reactions && typeof match.reactions === 'object' ? match.reactions : {};
+  return `<div class="match-reactions" aria-label="Maç tepkileri">
+    <span class="match-reactions-label">Tepkiler</span>
+    <div class="match-reaction-buttons">
+      ${MATCH_REACTIONS.map(emoji => {
+        const count = Object.values(reactions).filter(value => value === emoji).length;
+        const mine = reactions[uid] === emoji;
+        return `<button type="button" class="reaction-btn ${mine ? 'selected' : ''}" data-match-reaction="${safe(match.id)}" data-reaction="${emoji}" aria-label="${emoji} tepkisi">${emoji}<span>${count}</span></button>`;
+      }).join('')}
+    </div>
+  </div>`;
 }
 
 function renderMatches() {
@@ -999,6 +1037,7 @@ function renderMatches() {
         <div class="match-meta">${safe(predictionStatus(m))}</div>
         ${liveScoreMarkup(m)}
         ${matchEventsMarkup(m)}
+        ${matchReactionsMarkup(m)}
       </div>
       <div class="match-actions">
         <div class="prediction-label">
@@ -1013,6 +1052,27 @@ function renderMatches() {
 
   el.querySelectorAll('[data-predict]').forEach(button => {
     button.addEventListener('click', () => openPrediction(button.dataset.predict));
+  });
+
+  el.querySelectorAll('[data-match-reaction]').forEach(button => {
+    button.addEventListener('click', async () => {
+      const matchId = button.dataset.matchReaction;
+      const emoji = button.dataset.reaction;
+      if (!MATCH_REACTIONS.includes(emoji) || !uid || !groupCode) return;
+      button.disabled = true;
+      try {
+        const field = `reactions.${uid}`;
+        const current = matches.find(item => item.id === matchId)?.reactions?.[uid];
+        await updateDoc(doc(db, 'groups', groupCode, 'matches', matchId), {
+          [field]: current === emoji ? deleteField() : emoji
+        });
+      } catch (error) {
+        console.error('Maç tepkisi kaydedilemedi:', error);
+        alert('Tepki kaydedilemedi: ' + (error.message || error));
+      } finally {
+        button.disabled = false;
+      }
+    });
   });
 }
 
@@ -1432,13 +1492,167 @@ function renderTable() {
     ? totals.map((p, i) =>
       `<tr>
         <td>${i + 1}</td>
-        <td><span class="leaderboard-player">${avatarMarkup(p.id, 'player-avatar player-avatar-small')}<span>${safe(p.name)}${p.id === uid ? ' (Sen)' : ''}</span></span></td>
+        <td><span class="leaderboard-player">${avatarMarkup(p.id, 'player-avatar player-avatar-small')}<button type="button" class="player-profile-link" data-player-profile="${safe(p.id)}">${safe(p.name)}${p.id === uid ? ' (Sen)' : ''}</button></span></td>
         <td>${p.played}</td>
         <td><b>${p.pts}</b></td>
       </tr>`
     ).join('')
     : '<tr><td colspan="4" class="empty">Henüz oyuncu yok.</td></tr>';
 }
+
+
+function playerStats(playerId) {
+  const person = players.find(item => item.id === playerId);
+  const finished = matches.filter(hasResult);
+  const predictions = finished.map(match => ({ match, prediction: match.predictions?.[playerId] })).filter(item => item.prediction);
+  const exact = predictions.filter(({ match, prediction }) =>
+    Number(prediction.home) === Number(match.homeScore) && Number(prediction.away) === Number(match.awayScore)
+  ).length;
+  const outcome = predictions.filter(({ match, prediction }) =>
+    Math.sign(Number(prediction.home) - Number(prediction.away)) === Math.sign(Number(match.homeScore) - Number(match.awayScore))
+  ).length;
+  const standing = calculateStandings().find(item => item.id === playerId);
+  const bonuses = bonusSelections.filter(item => item.uid === playerId).length;
+  return {
+    person,
+    points: standing?.pts || 0,
+    played: predictions.length,
+    exact,
+    outcome,
+    accuracy: predictions.length ? Math.round(outcome / predictions.length * 100) : 0,
+    bonuses
+  };
+}
+
+function renderPlayerDirectory() {
+  const container = $('playerProfilesGrid');
+  if (!container) return;
+  if (!players.length) {
+    container.innerHTML = '<div class="empty">Bu ligde henüz oyuncu yok.</div>';
+    return;
+  }
+  const standings = calculateStandings();
+  const rankById = new Map(standings.map((item, index) => [item.id, index + 1]));
+  container.innerHTML = [...players].sort((a, b) => (a.name || '').localeCompare(b.name || '', 'tr')).map(person => {
+    const stats = playerStats(person.id);
+    return `<button type="button" class="player-profile-card" data-player-profile="${safe(person.id)}">
+      <span class="player-profile-card-avatar">${avatarMarkup(person.id, 'player-avatar')}</span>
+      <strong>${safe(person.name || 'Oyuncu')}${person.id === uid ? ' · Sen' : ''}</strong>
+      <span class="player-profile-card-meta">${rankById.get(person.id) || '—'}. sıra · ${stats.points} puan</span>
+      <span class="player-profile-card-meta">${stats.exact} tam skor · %${stats.accuracy} başarı</span>
+    </button>`;
+  }).join('');
+}
+
+function openPlayerProfile(playerId) {
+  const stats = playerStats(playerId);
+  if (!stats.person) return;
+  const rank = calculateStandings().findIndex(item => item.id === playerId) + 1;
+  $('playerProfileAvatar').innerHTML = avatarMarkup(playerId, 'player-avatar profile-large-avatar');
+  $('playerProfileName').textContent = stats.person.name || 'Oyuncu';
+  $('playerProfileLeague').textContent = leagueNames[groupCode] || groupCode;
+  $('playerProfileStats').innerHTML = [
+    ['Lig sıralaması', rank ? `#${rank}` : '—'],
+    ['Toplam puan', stats.points],
+    ['Tahmin yapılan maç', stats.played],
+    ['Tam skor', stats.exact],
+    ['Doğru sonuç', stats.outcome],
+    ['Başarı oranı', `%${stats.accuracy}`],
+    ['Bonus hakkı kullanımı', stats.bonuses]
+  ].map(([label, value]) => `<div class="profile-stat"><span>${safe(label)}</span><strong>${safe(value)}</strong></div>`).join('');
+  $('playerProfileDialog').showModal();
+}
+
+document.addEventListener('click', event => {
+  const trigger = event.target.closest('[data-player-profile]');
+  if (trigger) openPlayerProfile(trigger.dataset.playerProfile);
+});
+
+function renderChat() {
+  const list = $('chatMessagesList');
+  if (!list) return;
+  if (!chatMessages.length) {
+    list.innerHTML = '<div class="empty">Henüz mesaj yok. Sohbeti başlatan sen olabilirsin.</div>';
+    return;
+  }
+  list.innerHTML = chatMessages.map(item => {
+    const mine = item.uid === uid;
+    const date = toDate(item.createdAt);
+    const time = date ? date.toLocaleString('tr-TR', { dateStyle: 'short', timeStyle: 'short', timeZone: TIME_ZONE }) : 'Şimdi';
+    const canDelete = mine || isAdmin();
+    return `<article class="chat-message ${mine ? 'mine' : ''}">
+      <div class="chat-message-avatar">${avatarMarkup(item.uid, 'player-avatar player-avatar-small')}</div>
+      <div class="chat-message-body">
+        <div class="chat-message-heading"><strong>${safe(item.playerName || 'Oyuncu')}${mine ? ' · Sen' : ''}</strong><time>${safe(time)}</time></div>
+        <p>${safe(item.text || '')}</p>
+        ${canDelete || (isAdmin() && !mine) ? `<div class="chat-message-actions">
+          ${canDelete ? `<button type="button" data-chat-delete="${safe(item.id)}">Sil</button>` : ''}
+          ${isAdmin() && !mine ? `<button type="button" data-chat-mute="${safe(item.uid)}" data-chat-name="${safe(item.playerName || 'Oyuncu')}">24 saat sustur</button>` : ''}
+        </div>` : ''}
+      </div>
+    </article>`;
+  }).join('');
+  list.scrollTop = list.scrollHeight;
+}
+
+$('chatForm')?.addEventListener('submit', async event => {
+  event.preventDefault();
+  const input = $('chatMessageInput');
+  const status = $('chatStatus');
+  const textValue = input?.value.trim() || '';
+  if (!textValue || textValue.length > 500) return message(status, 'Mesaj 1-500 karakter arasında olmalı.');
+  const button = $('chatSendButton');
+  button.disabled = true;
+  try {
+    await addDoc(collection(db, 'groups', groupCode, 'chatMessages'), {
+      uid,
+      playerName: player?.name || 'Oyuncu',
+      text: textValue,
+      createdAt: serverTimestamp()
+    });
+    input.value = '';
+    message(status, '');
+  } catch (error) {
+    console.error('Sohbet mesajı gönderilemedi:', error);
+    message(status, 'Mesaj gönderilemedi. Susturulmuş olabilirsin veya bağlantı sorunu var.');
+  } finally {
+    button.disabled = false;
+  }
+});
+
+$('chatMessagesList')?.addEventListener('click', async event => {
+  const deleteButton = event.target.closest('[data-chat-delete]');
+  const muteButton = event.target.closest('[data-chat-mute]');
+  if (deleteButton) {
+    const item = chatMessages.find(entry => entry.id === deleteButton.dataset.chatDelete);
+    if (!item || (item.uid !== uid && !isAdmin())) return;
+    if (!confirm('Bu mesaj silinsin mi?')) return;
+    try {
+      await deleteDoc(doc(db, 'groups', groupCode, 'chatMessages', item.id));
+    } catch (error) {
+      console.error(error);
+      alert('Mesaj silinemedi: ' + (error.message || error));
+    }
+  }
+  if (muteButton) {
+    if (!isAdmin()) return;
+    const targetId = muteButton.dataset.chatMute;
+    const targetName = muteButton.dataset.chatName || 'Oyuncu';
+    if (!confirm(`${targetName} 24 saat boyunca bu lig sohbetinde susturulsun mu?`)) return;
+    try {
+      await setDoc(doc(db, 'groups', groupCode, 'chatMutes', targetId), {
+        uid: targetId,
+        mutedUntil: Timestamp.fromDate(new Date(Date.now() + 24 * 60 * 60 * 1000)),
+        mutedBy: uid,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+      alert(`${targetName} 24 saat susturuldu.`);
+    } catch (error) {
+      console.error(error);
+      alert('Oyuncu susturulamadı: ' + (error.message || error));
+    }
+  }
+});
 
 function groupBonusSelections(selections) {
   const groups = new Map();
