@@ -629,12 +629,14 @@ async function boot() {
     avatars = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     renderAvatarUI();
     renderTable();
+    renderPlayerDirectory();
   }, err => console.error('Avatar galerisi okunamadı:', err));
 
   unsubProfiles = subscribeSharedSnapshot(db, 'global:users', collection(db, 'users'), snap => {
     userProfiles = Object.fromEntries(snap.docs.map(d => [d.id, d.data()]));
     renderAvatarUI();
     renderTable();
+    renderPlayerDirectory();
   }, err => console.error('Oyuncu profilleri okunamadı:', err));
 
   if (isAdmin()) {
@@ -890,6 +892,7 @@ function listen() {
       renderAdminMatches();
       renderTable();
       renderBonusPanel();
+      renderPlayerDirectory();
     },
     err => console.error('Maç dinleme hatası:', err)
   );
@@ -906,6 +909,7 @@ function listen() {
 
       renderTable();
       renderBonusPanel();
+      renderPlayerDirectory();
     },
     err => console.error('Oyuncu dinleme hatası:', err)
   );
@@ -924,6 +928,7 @@ function listen() {
       renderAdminMatches();
       renderTable();
       renderBonusPanel();
+      renderPlayerDirectory();
     },
     err => {
       console.error('Bonus seçimleri dinleme hatası:', err);
@@ -935,7 +940,6 @@ function listen() {
       }
     }
   );
-}
 
   unsubChat = subscribeSharedSnapshot(
     db,
@@ -954,6 +958,7 @@ function listen() {
       message($('chatStatus'), 'Sohbet yüklenemedi. Firestore Rules ayarlarını kontrol et.');
     }
   );
+}
 
 function bonusMatchIds() {
   return new Set(
