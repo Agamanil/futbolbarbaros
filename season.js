@@ -803,6 +803,10 @@ function renderManualBonusAdmin() {
   const status = $('manualBonusAdminStatus');
   if (!awardSelect || !matchSelect || !button || !status) return;
 
+  // Snapshot yenilenirken yöneticinin seçtiği oyuncu ve maç korunur.
+  const previousAwardValue = awardSelect.value;
+  const previousMatchValue = matchSelect.value;
+
   awardSelect.innerHTML = '';
   matchSelect.innerHTML = '';
   button.disabled = true;
@@ -840,6 +844,14 @@ function renderManualBonusAdmin() {
   matchSelect.innerHTML = context.futureMatches.map(match =>
     `<option value="${safe(match.id)}">${safe(match.homeTeam)} - ${safe(match.awayTeam)} · ${safe(new Date(toDate(match.kickoff)).toLocaleString('tr-TR', { dateStyle: 'short', timeStyle: 'short', timeZone: TIME_ZONE }))}</option>`
   ).join('');
+
+  // Önceki seçim hâlâ geçerliyse ilk seçeneğe dönmek yerine onu geri yükle.
+  if ([...awardSelect.options].some(option => option.value === previousAwardValue)) {
+    awardSelect.value = previousAwardValue;
+  }
+  if ([...matchSelect.options].some(option => option.value === previousMatchValue)) {
+    matchSelect.value = previousMatchValue;
+  }
 
   button.disabled = false;
   status.textContent = 'Hesabına erişilemeyen günün sonuncusu adına, 48 saatlik hakkı dolmadan henüz başlamamış bir maç seçebilirsin.';
