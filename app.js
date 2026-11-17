@@ -6,7 +6,7 @@ import { getIdToken } from 'https://www.gstatic.com/firebasejs/13.2.0/firebase-a
 import { getMessaging, getToken, isSupported, onMessage } from 'https://www.gstatic.com/firebasejs/13.2.0/firebase-messaging.js';
 import {
   getFirestore, doc, getDoc, setDoc, addDoc, collection, getDocs,
-  query, orderBy, limit, onSnapshot, updateDoc, deleteDoc, deleteField, serverTimestamp, Timestamp
+  query, orderBy, limit, onSnapshot, updateDoc, deleteDoc, deleteField, runTransaction, serverTimestamp, Timestamp
 } from 'https://www.gstatic.com/firebasejs/13.2.0/firebase-firestore.js';
 import { firebaseConfig, ADMIN_UID, firebaseVapidKey } from './config.js';
 import { subscribeSharedSnapshot } from './shared-firestore-listeners.js';
@@ -1609,17 +1609,29 @@ $('chatForm')?.addEventListener('submit', async event => {
   const button = $('chatSendButton');
   button.disabled = true;
   try {
-    await addDoc(collection(db, 'groups', groupCode, 'chatMessages'), {
-      uid,
-      playerName: player?.name || 'Oyuncu',
-      text: textValue,
-      createdAt: serverTimestamp()
+    const rateRef = doc(db, 'groups', groupCode, 'chatRateLimits', uid);
+    const messageRef = doc(collection(db, 'groups', groupCode, 'chatMessages'));
+    await runTransaction(db, async transaction => {
+      const rateSnap = await transaction.get(rateRef);
+      if (rateSnap.exists()) {
+        const lastSentAt = toDate(rateSnap.data().lastSentAt);
+        if (lastSentAt && Date.now() - lastSentAt.getTime() < 2000) {
+          throw new Error('Mesajlar arasında en az 2 saniye beklemelisin.');
+        }
+      }
+      transaction.set(rateRef, { uid, lastSentAt: serverTimestamp() });
+      transaction.set(messageRef, {
+        uid,
+        playerName: player?.name || 'Oyuncu',
+        text: textValue,
+        createdAt: serverTimestamp()
+      });
     });
     input.value = '';
     message(status, '');
   } catch (error) {
     console.error('Sohbet mesajı gönderilemedi:', error);
-    message(status, 'Mesaj gönderilemedi. Susturulmuş olabilirsin veya bağlantı sorunu var.');
+    message(status, error.message || 'Mesaj gönderilemedi. Susturulmuş olabilirsin veya bağlantı sorunu var.');
   } finally {
     button.disabled = false;
   }
