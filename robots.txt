@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://agamanil.github.io/futbolbarbaros/sitemap.xml
