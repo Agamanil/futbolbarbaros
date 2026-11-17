@@ -31,6 +31,13 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/groups/$(groupId)/players/$(request.auth.uid));
     }
 
+    function isChatMuted(groupId) {
+      let mutePath = /databases/$(database)/documents/groups/$(groupId)/chatMutes/$(request.auth.uid);
+      return exists(mutePath)
+        && get(mutePath).data.get('mutedUntil', null) is timestamp
+        && get(mutePath).data.mutedUntil > request.time;
+    }
+
     function matchExists(groupId, matchId) {
       return exists(/databases/$(database)/documents/groups/$(groupId)/matches/$(matchId));
     }
@@ -69,6 +76,38 @@ service cloud.firestore {
         allow delete: if isAdmin();
       }
 
+
+      match /chatMessages/{messageId} {
+        allow read: if isMember(groupId) || isAdmin();
+        allow create: if isMember(groupId)
+          && !isChatMuted(groupId)
+          && request.resource.data.keys().hasAll(['uid', 'playerName', 'text', 'createdAt'])
+          && request.resource.data.keys().hasOnly(['uid', 'playerName', 'text', 'createdAt'])
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.playerName is string
+          && request.resource.data.playerName.size() >= 2
+          && request.resource.data.playerName.size() <= 18
+          && request.resource.data.text is string
+          && request.resource.data.text.size() >= 1
+          && request.resource.data.text.size() <= 500
+          && request.resource.data.createdAt == request.time;
+        allow delete: if isAdmin() || (isMember(groupId) && resource.data.uid == request.auth.uid);
+        allow update: if false;
+      }
+
+      match /chatMutes/{playerId} {
+        allow get: if isAdmin() || (isMember(groupId) && request.auth.uid == playerId);
+        allow list: if isAdmin();
+        allow create, update: if isAdmin()
+          && request.resource.data.keys().hasAll(['uid', 'mutedUntil', 'mutedBy', 'updatedAt'])
+          && request.resource.data.keys().hasOnly(['uid', 'mutedUntil', 'mutedBy', 'updatedAt'])
+          && request.resource.data.uid == playerId
+          && request.resource.data.mutedUntil is timestamp
+          && request.resource.data.mutedBy == request.auth.uid
+          && request.resource.data.updatedAt == request.time;
+        allow delete: if isAdmin();
+      }
+
       match /matches/{matchId} {
         allow read: if isMember(groupId) || isAdmin();
         allow create, delete: if isAdmin();
@@ -80,12 +119,20 @@ service cloud.firestore {
           && request.resource.data.predictions.diff(resource.data.predictions).affectedKeys().hasOnly([request.auth.uid])
           && request.resource.data.predictions[request.auth.uid].keys().hasOnly(['home', 'away', 'playerName', 'updatedAt'])
           && request.resource.data.predictions[request.auth.uid].home is int
-          && request.resource.data.predictions[request.auth.uid].away is int
           && request.resource.data.predictions[request.auth.uid].home >= 0
           && request.resource.data.predictions[request.auth.uid].home <= 30
           && request.resource.data.predictions[request.auth.uid].away is int
           && request.resource.data.predictions[request.auth.uid].away >= 0
           && request.resource.data.predictions[request.auth.uid].away <= 30
+        ) || (
+          isMember(groupId)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactions'])
+          && request.resource.data.reactions is map
+          && request.resource.data.reactions.diff(resource.data.get('reactions', {})).affectedKeys().hasOnly([request.auth.uid])
+          && (
+            !request.resource.data.reactions.keys().hasAny([request.auth.uid])
+            || request.resource.data.reactions[request.auth.uid] in ['😂', '😱', '🔥', '💀', '👏', '⚽']
+          )
         );
 
         match /risks/{riskId} {
