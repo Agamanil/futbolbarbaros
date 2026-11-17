@@ -413,7 +413,7 @@ function renderSeasonLeaderboard(seasonResult) {
       <td>${currentRank}</td>
       <td>
         <div class="season-player-cell">
-          <span class="season-player-name">${safe(person.name)}${self}</span>
+          <button type="button" class="season-player-name player-profile-link" data-player-profile="${safe(person.id)}">${safe(person.name)}${self}</button>
           ${badges.length ? `<div class="season-player-badges">${badges.join('')}</div>` : ''}
         </div>
       </td>
