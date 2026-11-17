@@ -182,12 +182,13 @@ service cloud.firestore {
         ) || (isMember(groupId)
           && request.resource.data.keys().hasAll([
             'uid', 'playerName', 'matchId', 'homeTeam', 'awayTeam',
-            'selectionDay', 'earnedDate', 'targetDate', 'selectedAt'
+            'selectionDay', 'earnedDate', 'targetDate', 'seasonId', 'selectedAt'
           ])
           && request.resource.data.keys().hasOnly([
             'uid', 'playerName', 'matchId', 'homeTeam', 'awayTeam',
-            'selectionDay', 'earnedDate', 'targetDate', 'selectedAt'
+            'selectionDay', 'earnedDate', 'targetDate', 'seasonId', 'selectedAt'
           ])
+          && request.resource.data.seasonId is string
           && request.resource.data.uid == request.auth.uid
           && request.resource.data.selectionDay is string
           && request.resource.data.earnedDate is string
