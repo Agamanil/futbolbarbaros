@@ -853,6 +853,9 @@ function renderManualBonusAdmin() {
     matchSelect.value = previousMatchValue;
   }
 
+  // HTML'de başlangıçta disabled olan seçim kutularını seçenekler yüklendiğinde aç.
+  awardSelect.disabled = false;
+  matchSelect.disabled = false;
   button.disabled = false;
   status.textContent = 'Hesabına erişilemeyen günün sonuncusu adına, 48 saatlik hakkı dolmadan henüz başlamamış bir maç seçebilirsin.';
 }
