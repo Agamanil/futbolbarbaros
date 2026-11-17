@@ -5,7 +5,7 @@ import { getAuth, signInAnonymously, onAuthStateChanged, setPersistence, browser
 import { getIdToken } from 'https://www.gstatic.com/firebasejs/13.2.0/firebase-auth.js';
 import { getMessaging, getToken, isSupported, onMessage } from 'https://www.gstatic.com/firebasejs/13.2.0/firebase-messaging.js';
 import {
-  getFirestore, doc, getDoc, setDoc, addDoc, collection, getDocs,
+  getFirestore, doc, getDoc, setDoc, collection, getDocs,
   query, orderBy, limit, onSnapshot, updateDoc, deleteDoc, deleteField, runTransaction, serverTimestamp, Timestamp
 } from 'https://www.gstatic.com/firebasejs/13.2.0/firebase-firestore.js';
 import { firebaseConfig, ADMIN_UID, firebaseVapidKey } from './config.js';
