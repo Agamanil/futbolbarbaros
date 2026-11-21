@@ -1026,17 +1026,32 @@ function renderSeasonAdminList() {
   }).join('');
 }
 
-async function archiveEligibleSeasonMatches(seasonResult) {
-  if (!isAdmin() || !groupCode || !seasonResult?.complete) return;
+async function archiveEligibleSeasonMatches() {
+  if (!isAdmin() || !groupCode || !seasons.length) return;
 
+  const originalSeasonId = selectedSeasonId;
   const cutoff = Date.now() - MATCH_ARCHIVE_AGE_MS;
-  const eligible = seasonResult.fixtures.filter(match => {
-    if (match.archived === true || !hasResult(match) || archivingMatchIds.has(match.id)) return false;
-    const kickoffMs = timestampMillis(match.kickoff);
-    return Number.isFinite(kickoffMs) && kickoffMs <= cutoff;
-  });
+  const eligibleById = new Map();
 
-  for (const match of eligible) {
+  // Yalnızca ekranda seçili olan sezonu değil, bu ligdeki bütün sezonları
+  // denetle. Böylece eski sezonların maçları da kendiliğinden arşivlenir.
+  try {
+    for (const season of seasons) {
+      selectedSeasonId = season.id;
+      const result = calculateSeason();
+      if (!result.complete) continue;
+
+      for (const match of result.fixtures) {
+        if (match.archived === true || !hasResult(match) || archivingMatchIds.has(match.id)) continue;
+        const kickoffMs = timestampMillis(match.kickoff);
+        if (Number.isFinite(kickoffMs) && kickoffMs <= cutoff) eligibleById.set(match.id, match);
+      }
+    }
+  } finally {
+    selectedSeasonId = originalSeasonId;
+  }
+
+  for (const match of eligibleById.values()) {
     archivingMatchIds.add(match.id);
     try {
       await updateDoc(doc(db, 'groups', groupCode, 'matches', match.id), {
@@ -1065,7 +1080,7 @@ function renderAll() {
 
   // Arşivleme yalnızca sezonun tamamı kesinleştiğinde ve maç başlangıcından
   // itibaren en az dört gün geçtiğinde yapılır. Maç belgesi silinmez.
-  if (seasonResult.complete) archiveEligibleSeasonMatches(seasonResult);
+  archiveEligibleSeasonMatches();
 
   if (season) {
     if (kicker) kicker.textContent = `${formatDay(season.startDate)} – ${formatDay(season.endDate)} · SEZON ÖZELİ`;
