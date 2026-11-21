@@ -1016,7 +1016,8 @@ function renderMatches() {
     }
 
     let othersHtml = '';
-    const kickoffMs = timestampMillis(m.kickoff);
+    const kickoffDate = toDate(m.kickoff);
+    const kickoffMs = kickoffDate instanceof Date ? kickoffDate.getTime() : NaN;
     const matchStarted = Number.isFinite(kickoffMs) && Date.now() >= kickoffMs;
 
     if (!matchStarted) {
