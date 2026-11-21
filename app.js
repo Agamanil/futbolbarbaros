@@ -625,6 +625,19 @@ async function boot() {
   console.info('FUTBOLBARBAROS Firebase UID:', uid);
   console.info('FUTBOLBARBAROS yönetici hesabı:', isAdmin() ? 'EVET' : 'HAYIR');
 
+  // Gecici, salt-okunur Firestore izin testi. Tarayici konsolundan fbPermissionProbe() ile calistirilir.
+  window.fbPermissionProbe = async () => {
+    console.info('FIRESTORE TEST OTURUMU:', { uid, isAdmin: isAdmin() });
+    for (const name of ['avatars', 'users']) {
+      try {
+        const result = await getDocs(collection(db, name));
+        console.info(`[OK] /${name}: ${result.size} belge okunabildi.`);
+      } catch (error) {
+        console.error(`[HATA] /${name}:`, error.code, error.message);
+      }
+    }
+  };
+
   unsubAvatars = subscribeSharedSnapshot(db, 'global:avatars', collection(db, 'avatars'), snap => {
     avatars = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     renderAvatarUI();
