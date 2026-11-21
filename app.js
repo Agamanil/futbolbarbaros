@@ -536,7 +536,7 @@ function activateTab(name) {
     tab.classList.toggle('active', tab.dataset.tab === name);
   });
 
-  ['matches', 'table', 'players', 'chat', 'honor', 'admin'].forEach(tab => {
+  ['matches', 'archive', 'table', 'players', 'chat', 'honor', 'admin'].forEach(tab => {
     $(`${tab}Tab`).classList.toggle('hidden', tab !== name);
   });
 }
@@ -983,23 +983,25 @@ function matchReactionsMarkup(match) {
 }
 
 function renderMatches() {
+  const activeMatches = matches.filter(match => match.archived !== true);
   const countEl = $('matchCount');
 
   if (countEl) {
-    countEl.textContent = `${matches.length} MAÇ`;
+    countEl.textContent = `${activeMatches.length} MAÇ`;
   }
 
   const el = $('matchesList');
   if (!el) return;
 
-  if (!matches.length) {
-    el.innerHTML = '<div class="empty">Henüz maç eklenmedi.</div>';
+  if (!activeMatches.length) {
+    el.innerHTML = '<div class="empty">Aktif maç bulunmuyor.</div>';
+    renderArchive();
     return;
   }
 
   const bonusIds = bonusMatchIds();
 
-  el.innerHTML = matches.map(m => {
+  el.innerHTML = activeMatches.map(m => {
     const p = predictionFor(m);
     const locked = isLocked(m);
 
@@ -1079,6 +1081,55 @@ function renderMatches() {
       }
     });
   });
+
+  renderArchive();
+}
+
+function renderArchive() {
+  const container = $('archiveMatchesList');
+  const count = $('archiveMatchCount');
+  if (!container) return;
+
+  const archivedMatches = matches
+    .filter(match => match.archived === true)
+    .sort((a, b) => toDate(b.kickoff) - toDate(a.kickoff));
+
+  if (count) count.textContent = `${archivedMatches.length} MAÇ`;
+
+  if (!archivedMatches.length) {
+    container.innerHTML = '<div class="empty">Henüz arşive taşınmış maç yok.</div>';
+    return;
+  }
+
+  const bonusIds = bonusMatchIds();
+  container.innerHTML = archivedMatches.map(match => {
+    const ownPrediction = predictionFor(match);
+    const predictions = Object.entries(match.predictions || {});
+    const predictionRows = predictions.length
+      ? predictions.map(([playerId, prediction]) => {
+          const points = pointsFor(match, prediction, bonusIds);
+          return `<div class="archive-prediction-row">
+            <span>${safe(prediction.playerName || players.find(person => person.id === playerId)?.name || 'Oyuncu')}</span>
+            <strong>${safe(prediction.home)} - ${safe(prediction.away)}</strong>
+            <span>${points} puan</span>
+          </div>`;
+        }).join('')
+      : '<p class="match-meta">Bu maç için tahmin kaydı bulunmuyor.</p>';
+
+    return `<article class="match-card archive-match-card">
+      <div>
+        <div class="match-meta">${safe(match.competition || 'FUTBOL')} · ${dateText(match.kickoff)} ${bonusIds.has(match.id) ? '<span style="color:#fbbf24;font-weight:800;">⭐ BONUS 2X</span>' : ''}</div>
+        <div class="teams"><span>${safe(match.homeTeam)}</span><span class="vs">VS</span><span>${safe(match.awayTeam)}</span></div>
+        <div class="match-meta" style="color:#22c55e;font-weight:800;">SONUÇ · ${safe(match.homeScore)} - ${safe(match.awayScore)}</div>
+        <div class="match-meta">Arşive taşındı · ${match.archivedAt ? dateText(match.archivedAt) : '—'}</div>
+      </div>
+      <div class="archive-predictions">
+        <strong>Tahminler ve kazanılan puanlar</strong>
+        ${ownPrediction ? `<p class="match-meta">Senin tahminin: <b>${safe(ownPrediction.home)} - ${safe(ownPrediction.away)}</b></p>` : ''}
+        ${predictionRows}
+      </div>
+    </article>`;
+  }).join('');
 }
 
 function openPrediction(id) {
