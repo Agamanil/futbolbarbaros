@@ -55,6 +55,8 @@ let avatarsLoaded = false;
 let honorSnapshotCreating = false;
 let startingGroup = false;
 let honorListenerKey = '';
+const archivingMatchIds = new Set();
+const MATCH_ARCHIVE_AGE_MS = 4 * 24 * 60 * 60 * 1000;
 
 const isAdmin = () => Boolean(uid) && uid === ADMIN_UID;
 
@@ -1024,6 +1026,33 @@ function renderSeasonAdminList() {
   }).join('');
 }
 
+async function archiveEligibleSeasonMatches(seasonResult) {
+  if (!isAdmin() || !groupCode || !seasonResult?.complete) return;
+
+  const cutoff = Date.now() - MATCH_ARCHIVE_AGE_MS;
+  const eligible = seasonResult.fixtures.filter(match => {
+    if (match.archived === true || !hasResult(match) || archivingMatchIds.has(match.id)) return false;
+    const kickoffMs = timestampMillis(match.kickoff);
+    return Number.isFinite(kickoffMs) && kickoffMs <= cutoff;
+  });
+
+  for (const match of eligible) {
+    archivingMatchIds.add(match.id);
+    try {
+      await updateDoc(doc(db, 'groups', groupCode, 'matches', match.id), {
+        archived: true,
+        archivedAt: serverTimestamp(),
+        archivedBy: uid
+      });
+      console.info('Maç arşive taşındı:', match.id);
+    } catch (error) {
+      console.error('Maç arşive taşınamadı:', match.id, error);
+    } finally {
+      archivingMatchIds.delete(match.id);
+    }
+  }
+}
+
 function renderAll() {
   renderSeasonPicker();
 
@@ -1033,6 +1062,10 @@ function renderAll() {
   const tableHeading = $('seasonTableHeading');
   const explanation = $('seasonExplanation');
   const seasonResult = calculateSeason();
+
+  // Arşivleme yalnızca sezonun tamamı kesinleştiğinde ve maç başlangıcından
+  // itibaren en az dört gün geçtiğinde yapılır. Maç belgesi silinmez.
+  if (seasonResult.complete) archiveEligibleSeasonMatches(seasonResult);
 
   if (season) {
     if (kicker) kicker.textContent = `${formatDay(season.startDate)} – ${formatDay(season.endDate)} · SEZON ÖZELİ`;
