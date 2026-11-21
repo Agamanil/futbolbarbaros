@@ -1261,10 +1261,26 @@ $('matchForm').addEventListener('submit', async e => {
       predictions: {},
       hasRiskEvents: false
     });
+
+    // Geçici tanılama: yazılan belgenin gerçek Firestore yolunu ve geri okunabildiğini doğrula.
+    const verification = await getDoc(matchRef);
+    const diagnostic = {
+      projectId: firebaseConfig.projectId,
+      uid,
+      groupCode,
+      documentPath: matchRef.path,
+      documentId: matchRef.id,
+      existsAfterWrite: verification.exists()
+    };
+    console.info('FUTBOLBARBAROS maç yazma doğrulaması:', diagnostic);
+    if (!verification.exists()) {
+      throw new Error('Maç yazıldı ancak aynı belge geri okunamadı. Tanılama: ' + JSON.stringify(diagnostic));
+    }
+
     e.target.reset();
     fetchedEspnMatch = null;
     $('espnMatchPreview').style.display = 'none';
-    message($('matchFormMessage'), `${groupCode} ligine maç eklendi. Tahminler 5 dakika sonra açılacak.`, false);
+    message($('matchFormMessage'), `Maç kaydedildi: ${matchRef.path} · ID: ${matchRef.id}`, false);
   } catch (err) {
     console.error(err);
     message($('matchFormMessage'), 'Maç eklenemedi: ' + err.message);
