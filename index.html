@@ -168,6 +168,7 @@
 
     <nav class="tabs">
       <button class="tab active" data-tab="matches">Maçlar & Tahminler</button>
+      <button class="tab" data-tab="archive">Arşiv</button>
       <button class="tab" data-tab="table">Puan Tablosu</button>
       <button class="tab" data-tab="players">Oyuncular</button>
       <button class="tab" data-tab="chat">Lig Sohbeti</button>
@@ -234,6 +235,15 @@
         <h3 id="matchCount">0 MAÇ</h3>
       </div>
       <div id="matchesList" class="matches-grid"></div>
+    </main>
+
+    <!-- Arşiv Sekmesi: maçlar ve tahminler silinmeden burada saklanır. -->
+    <main id="archiveTab" class="tab-content hidden">
+      <div class="section-header">
+        <h3>📁 Arşiv <span id="archiveMatchCount" class="match-meta">0 MAÇ</span></h3>
+      </div>
+      <p class="match-meta">Sezonu tamamlanmış ve maçın üzerinden en az 4 gün geçmiş karşılaşmalar burada saklanır. Tahminler ve kazanılan puanlar korunur.</p>
+      <div id="archiveMatchesList" class="matches-grid"></div>
     </main>
 
     <!-- Puan Tablosu Sekmesi -->
