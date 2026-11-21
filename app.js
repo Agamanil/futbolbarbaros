@@ -1016,9 +1016,13 @@ function renderMatches() {
     }
 
     let othersHtml = '';
+    const kickoffMs = timestampMillis(m.kickoff);
+    const matchStarted = Number.isFinite(kickoffMs) && Date.now() >= kickoffMs;
 
-    if (p && m.predictions) {
-      const otherEntries = Object.entries(m.predictions)
+    if (!matchStarted) {
+      othersHtml = '<div class="others-predictions-warning" style="margin-top:8px;font-size:.8rem;color:#f59e0b;background:rgba(245,158,11,.1);padding:6px;border-radius:4px;">Diğer oyuncuların tahminleri maç başladıktan sonra görünür.</div>';
+    } else {
+      const otherEntries = Object.entries(m.predictions || {})
         .filter(([userId]) => userId !== uid);
 
       if (otherEntries.length > 0) {
@@ -1026,15 +1030,13 @@ function renderMatches() {
           <div style="font-weight:bold;margin-bottom:4px;color:var(--accent,#3b82f6);">Diğer Oyuncuların Tahminleri:</div>
           <ul style="list-style:none;padding:0;margin:0;">
             ${otherEntries.map(([userId, pred]) =>
-              `<li><b>${safe(pred.playerName || 'Oyuncu')}:</b> ${pred.home} - ${pred.away}</li>`
+              `<li><b>${safe(pred.playerName || 'Oyuncu')}:</b> ${safe(pred.home)} - ${safe(pred.away)}</li>`
             ).join('')}
           </ul>
         </div>`;
       } else {
         othersHtml = '<div class="others-predictions" style="margin-top:8px;font-size:.85rem;color:#888;">Diğer oyuncular henüz bu maça tahmin yapmamış.</div>';
       }
-    } else {
-      othersHtml = '<div class="others-predictions-warning" style="margin-top:8px;font-size:.8rem;color:#f59e0b;background:rgba(245,158,11,.1);padding:6px;border-radius:4px;">Tahminini kaydettikten sonra diğer kullanıcıların tahminlerini görebilirsin.</div>';
     }
 
     return `<article class="match-card" data-match-id="${safe(m.id)}">
