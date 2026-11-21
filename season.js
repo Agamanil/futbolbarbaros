@@ -56,6 +56,7 @@ let honorSnapshotCreating = false;
 let startingGroup = false;
 let honorListenerKey = '';
 const archivingMatchIds = new Set();
+let archiveCheckRunning = false;
 const MATCH_ARCHIVE_AGE_MS = 4 * 24 * 60 * 60 * 1000;
 
 const isAdmin = () => Boolean(uid) && uid === ADMIN_UID;
@@ -1027,47 +1028,75 @@ function renderSeasonAdminList() {
 }
 
 async function archiveEligibleSeasonMatches() {
-  if (!isAdmin() || !groupCode || !seasons.length) return;
+  if (!isAdmin() || !groupCode || !seasons.length || archiveCheckRunning) return;
 
+  archiveCheckRunning = true;
   const originalSeasonId = selectedSeasonId;
   const cutoff = Date.now() - MATCH_ARCHIVE_AGE_MS;
   const eligibleById = new Map();
+  let completedSeasonCount = 0;
+  let oldMatchCount = 0;
+  let archivedCount = 0;
+  let failedCount = 0;
 
-  // Yalnızca ekranda seçili olan sezonu değil, bu ligdeki bütün sezonları
-  // denetle. Böylece eski sezonların maçları da kendiliğinden arşivlenir.
   try {
     for (const season of seasons) {
       selectedSeasonId = season.id;
       const result = calculateSeason();
       if (!result.complete) continue;
 
+      completedSeasonCount += 1;
+
       for (const match of result.fixtures) {
         if (match.archived === true || !hasResult(match) || archivingMatchIds.has(match.id)) continue;
+
         const kickoffMs = timestampMillis(match.kickoff);
-        if (Number.isFinite(kickoffMs) && kickoffMs <= cutoff) eligibleById.set(match.id, match);
+        if (kickoffMs === null || kickoffMs > cutoff) continue;
+
+        oldMatchCount += 1;
+        eligibleById.set(match.id, match);
       }
     }
+  } catch (error) {
+    console.error('Arşiv uygunluk kontrolü başarısız:', error);
+    failedCount += 1;
   } finally {
     selectedSeasonId = originalSeasonId;
   }
 
-  for (const match of eligibleById.values()) {
-    archivingMatchIds.add(match.id);
-    try {
-      await updateDoc(doc(db, 'groups', groupCode, 'matches', match.id), {
-        archived: true,
-        archivedAt: serverTimestamp(),
-        archivedBy: uid
-      });
-      console.info('Maç arşive taşındı:', match.id);
-    } catch (error) {
-      console.error('Maç arşive taşınamadı:', match.id, error);
-    } finally {
-      archivingMatchIds.delete(match.id);
+  try {
+    for (const match of eligibleById.values()) {
+      archivingMatchIds.add(match.id);
+      try {
+        await updateDoc(doc(db, 'groups', groupCode, 'matches', match.id), {
+          archived: true,
+          archivedAt: serverTimestamp(),
+          archivedBy: uid
+        });
+        archivedCount += 1;
+        console.info('Maç arşive taşındı:', match.id);
+      } catch (error) {
+        failedCount += 1;
+        console.error('Maç arşive taşınamadı:', match.id, error);
+      } finally {
+        archivingMatchIds.delete(match.id);
+      }
+    }
+  } finally {
+    archiveCheckRunning = false;
+  }
+
+  const adminMessage = $('seasonAdminMessage');
+  if (adminMessage && (archivedCount || failedCount || completedSeasonCount)) {
+    if (archivedCount) {
+      messageSeason(adminMessage, `${archivedCount} maç arşive taşındı.`, false);
+    } else if (failedCount) {
+      messageSeason(adminMessage, `Arşivleme sırasında ${failedCount} hata oluştu. Ayrıntı için tarayıcı konsolunu kontrol et.`);
+    } else if (!oldMatchCount) {
+      messageSeason(adminMessage, `${completedSeasonCount} tamamlanmış sezon kontrol edildi; 4 günü geçmiş, arşivlenmemiş maç bulunamadı.`, false);
     }
   }
 }
-
 function renderAll() {
   renderSeasonPicker();
 
