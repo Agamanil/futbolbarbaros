@@ -159,6 +159,7 @@
       </div>
       <div class="header-right">
         <button type="button" id="profileAvatarButton" class="profile-avatar-trigger" title="Profil fotoğrafını değiştir" aria-label="Profil fotoğrafını değiştir"><span class="player-avatar avatar-fallback">⚽</span></button>
+        <button type="button" id="showAdminLoginButton" class="small-btn">Yönetici Girişi</button>
         <button type="button" id="enableNotificationsButton" class="small-btn" title="Tarayıcı bildirimlerini etkinleştir">🔔 Bildirimleri aç</button>
         <span id="userBadge" class="badge hidden"></span>
         <button id="editNameButton" class="small-btn">İsim Değiştir</button>
@@ -635,6 +636,24 @@
       </div>
 
       <div id="nameMessage" class="message"></div>
+    </form>
+  </dialog>
+
+
+  <!-- Sunucu tarafindan dogrulanan yonetici girisi -->
+  <dialog id="adminLoginDialog" class="modal">
+    <form id="adminLoginForm" class="card modal-card">
+      <h3>Yönetici Girişi</h3>
+      <p class="match-meta">Bu alan yalnızca site yöneticisi içindir.</p>
+      <label for="adminLoginName">Yönetici adı</label>
+      <input id="adminLoginName" type="text" autocomplete="username" required maxlength="40">
+      <label for="adminLoginPassword">Şifre</label>
+      <input id="adminLoginPassword" type="password" autocomplete="current-password" required>
+      <div class="modal-actions">
+        <button type="button" class="secondary-btn" id="closeAdminLoginDialog">İptal</button>
+        <button type="submit" class="primary-btn" id="adminLoginSubmit">Giriş Yap</button>
+      </div>
+      <div id="adminLoginMessage" class="message" aria-live="polite"></div>
     </form>
   </dialog>
 
