@@ -277,6 +277,20 @@ service cloud.firestore {
         allow update, delete: if isAdmin();
       }
 
+      match /dailyMedia/{mediaId} {
+        allow read: if isMember(groupId) || isAdmin();
+        allow write: if false;
+      }
+
+      match /seasonTimeline/{eventId} {
+        allow read, write: if false;
+      }
+
+      match /seasonDocumentaries/{seasonId} {
+        allow read: if isMember(groupId) || isAdmin();
+        allow write: if false;
+      }
+
       match /seasons/{seasonId} {
         allow read: if isMember(groupId) || isAdmin();
         allow create, update, delete: if isAdmin();
