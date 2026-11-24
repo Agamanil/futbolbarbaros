@@ -142,7 +142,9 @@ service cloud.firestore {
           && request.time >= resource.data.predictionOpenAt
           && request.time < resource.data.predictionCloseAt
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['predictions'])
-          && request.resource.data.predictions.diff(resource.data.predictions).affectedKeys().hasOnly([request.auth.uid])
+          && request.resource.data.get('predictions', {}) is map
+          && resource.data.get('predictions', {}) is map
+          && request.resource.data.get('predictions', {}).diff(resource.data.get('predictions', {})).affectedKeys().hasOnly([request.auth.uid])
           && request.resource.data.predictions[request.auth.uid].keys().hasOnly(['home', 'away', 'playerName', 'updatedAt'])
           && request.resource.data.predictions[request.auth.uid].home is int
           && request.resource.data.predictions[request.auth.uid].home >= 0
