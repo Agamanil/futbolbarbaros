@@ -2,7 +2,7 @@
 // Firebase Spark (ucretsiz plan) ile calisir. Cloud Functions gerektirmez.
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/13.2.0/firebase-app.js';
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, setPersistence, browserLocalPersistence } from 'https://www.gstatic.com/firebasejs/13.2.0/firebase-auth.js';
-import { getIdToken } from 'https://www.gstatic.com/firebasejs/13.2.0/firebase-auth.js';
+import { getIdToken, getIdTokenResult } from 'https://www.gstatic.com/firebasejs/13.2.0/firebase-auth.js';
 import { getMessaging, getToken, isSupported, onMessage } from 'https://www.gstatic.com/firebasejs/13.2.0/firebase-messaging.js';
 import {
   getFirestore, doc, getDoc, setDoc, collection, getDocs,
@@ -25,6 +25,7 @@ const KNOWN_LEAGUES = [
 const KNOWN_LEAGUE_CODES = KNOWN_LEAGUES.map(item => item.code);
 
 let db, auth, uid = null, player = null, groupCode = '';
+let adminClaim = false;
 let authUser = null, pushMessaging = null, browserPushToken = null, foregroundMessageBound = false;
 let memberships = [], matches = [], players = [], bonusSelections = [], activeMatch = null;
 let leagueCatalog = [];
@@ -35,7 +36,7 @@ let unsubAvatars = null, unsubProfiles = null;
 let chatMessages = [];
 const MATCH_REACTIONS = ['😂', '😱', '🔥', '💀', '👏', '⚽'];
 
-const isAdmin = () => Boolean(uid) && uid === ADMIN_UID;
+const isAdmin = () => Boolean(uid && uid === ADMIN_UID && adminClaim);
 
 // Yönetici girişi: parola Worker tarafında doğrulanır; tarayıcıya parola gömülmez.
 const openAdminLoginDialog = () => {
@@ -663,6 +664,13 @@ async function boot() {
 
   authUser = user;
   uid = user.uid;
+  try {
+    const tokenResult = await getIdTokenResult(user, true);
+    adminClaim = tokenResult.claims.admin === true;
+  } catch (err) {
+    adminClaim = false;
+    console.warn('Yönetici kimlik iddiası doğrulanamadı:', err);
+  }
   console.info('FUTBOLBARBAROS Firebase UID:', uid);
   console.info('FUTBOLBARBAROS yönetici hesabı:', isAdmin() ? 'EVET' : 'HAYIR');
 
