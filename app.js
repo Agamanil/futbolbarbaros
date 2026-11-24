@@ -730,21 +730,11 @@ async function restoreSession() {
   saved = saved.map(c => c === 'ILOVE12C' ? 'ILOVE12CBRO' : c);
   const savedCodes = [...new Set(saved.filter(x => typeof x === 'string' && x))];
 
-  // Yönetici hesabı oyuncu profiline bağlı değildir; doğrudan yönetim panelini aç.
-  if (isAdmin()) {
-    memberships = [];
-    groupCode = '';
-    player = { name: 'Yönetici', uid };
-    showApp();
-    activateTab('admin');
-    return;
-  }
-
   // Kayıtlı ligler + bilinen ligler: localStorage silinmiş olsa bile
   // Firestore'daki oyuncu kaydından kullanıcı yeniden tanınır.
   // Kayıtlı ligler mevcutsa yalnızca onları doğrula. Bilinen liglerde arama,
   // localStorage tamamen boşsa eski oturumu kurtarmak için kullanılır.
-  const candidates = savedCodes.length ? savedCodes : KNOWN_LEAGUE_CODES;
+  const candidates = [...new Set([...savedCodes, ...KNOWN_LEAGUE_CODES])];
   const valid = [];
   const validPlayerData = new Map();
 
