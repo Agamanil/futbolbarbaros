@@ -175,6 +175,7 @@
       <button class="tab" data-tab="players">Oyuncular</button>
       <button class="tab" data-tab="chat">Lig Sohbeti</button>
       <button class="tab" data-tab="honor">Onur Duvarı</button>
+      <button class="tab" data-tab="gazette">📰 Gazete</button>
       <button class="tab admin-only hidden" data-tab="admin">Yönetim Paneli</button>
     </nav>
 
@@ -401,6 +402,15 @@
           </article>
         </div>
       </section>
+      <section class="card" style="margin-top:18px;">
+        <div class="section-header"><h3>🎬 Sezon Belgeselleri</h3></div>
+        <p class="match-meta">Tamamlanan sezonların hikâyeleri burada kalıcı olarak yer alır.</p>
+        <div id="seasonDocumentaryWall"><p class="match-meta">Sezon belgeselleri yükleniyor...</p></div>
+      </section>
+    </main>
+
+    <main id="gazetteTab" class="tab-content hidden">
+      <div id="dailyGazetteContent"><section class="card"><h3>📰 FUTBOLBARBAROS Gazetesi</h3><p class="match-meta">Günün maçları tamamlanınca otomatik yayımlanır.</p></section></div>
     </main>
 
     <!-- Yönetim Paneli Sekmesi -->
@@ -662,5 +672,6 @@
   <script type="module" src="season.js"></script>
   <script type="module" src="moderation.js"></script>
   <script type="module" src="risk.js"></script>
+  <script type="module" src="media.js"></script>
 </body>
 </html>
