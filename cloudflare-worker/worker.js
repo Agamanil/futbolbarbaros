@@ -1289,4 +1289,4 @@ async function runAutomaticNotifications(env) {
   }
 }
 
-// Cloudflare GitHub otomatik dağıtım testi.
+// Cloudflare GitHub otomatik dağıtım testi: compatibility date ayarlı.
