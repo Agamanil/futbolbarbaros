@@ -198,7 +198,7 @@ async function handleAdminLogin(body, env) {
     if (!env.ADMIN_PANEL_PASSWORD) {
       throw new Error("Cloudflare ADMIN_PANEL_PASSWORD secret ayarlanmamış.");
     }
-    if (body.username !== "Agamanil (patron)" ||
+    if (body.username !== "Agamanil(patron)" ||
         !constantTimeStringEqual(body.password, env.ADMIN_PANEL_PASSWORD)) {
       return json({ ok: false, error: "Yönetici adı veya şifre hatalı." }, 401);
     }
