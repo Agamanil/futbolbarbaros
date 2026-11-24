@@ -578,7 +578,7 @@ function activateTab(name) {
     tab.classList.toggle('active', tab.dataset.tab === name);
   });
 
-  ['matches', 'archive', 'table', 'players', 'chat', 'honor', 'admin'].forEach(tab => {
+  ['matches', 'archive', 'table', 'players', 'chat', 'honor', 'gazette', 'admin'].forEach(tab => {
     $(`${tab}Tab`).classList.toggle('hidden', tab !== name);
   });
 }
@@ -598,6 +598,7 @@ async function switchLeague(code, cachedPlayerData = null) {
 
   leagueNames[code] = groupSnap.exists() ? (groupSnap.data().name || code) : code;
   groupCode = code;
+  window.dispatchEvent(new CustomEvent('fb:league-changed', { detail: { code } }));
   player = { ...playerData, uid };
 
   if (!memberships.includes(code)) {
