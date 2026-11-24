@@ -38,10 +38,12 @@ const MATCH_REACTIONS = ['😂', '😱', '🔥', '💀', '👏', '⚽'];
 const isAdmin = () => Boolean(uid) && uid === ADMIN_UID;
 
 // Yönetici girişi: parola Worker tarafında doğrulanır; tarayıcıya parola gömülmez.
-$('showAdminLoginButton')?.addEventListener('click', () => {
+const openAdminLoginDialog = () => {
   $('adminLoginMessage').textContent = '';
   $('adminLoginDialog').showModal();
-});
+};
+$('showAdminLoginButton')?.addEventListener('click', openAdminLoginDialog);
+$('showAdminLoginButtonHeader')?.addEventListener('click', openAdminLoginDialog);
 $('closeAdminLoginDialog')?.addEventListener('click', () => $('adminLoginDialog').close());
 $('adminLoginForm')?.addEventListener('submit', async event => {
   event.preventDefault();
