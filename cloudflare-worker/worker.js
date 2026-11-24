@@ -86,6 +86,7 @@ export default {
 
   async scheduled(controller, env, ctx) {
     ctx.waitUntil(runAutomaticNotifications(env));
+    ctx.waitUntil(runMediaAutomation(env));
   }
 };
 
@@ -1290,3 +1291,301 @@ async function runAutomaticNotifications(env) {
 }
 
 // Cloudflare GitHub otomatik dağıtım testi: compatibility date ayarlı.
+
+
+const MEDIA_MODEL = "@cf/zai-org/glm-4.7-flash";
+
+async function mediaSave(path, values, token) {
+  const current = await fsGet(path, token);
+  const fields = {};
+  Object.keys(values).forEach(key => fields[key] = fsWrite(String(values[key] == null ? "" : values[key])));
+  const headers = { Authorization: "Bearer " + token, "Content-Type": "application/json" };
+  let response;
+  if (current) {
+    const mask = Object.keys(fields).map(key => "updateMask.fieldPaths=" + encodeURIComponent(key)).join("&");
+    response = await firestoreFetchWithRetry(FIRESTORE_ROOT + "/" + firestorePath(path) + "?" + mask,
+      { method: "PATCH", headers, body: JSON.stringify({ fields }) });
+  } else {
+    const parts = path.split("/");
+    const id = parts.pop();
+    response = await firestoreFetchWithRetry(FIRESTORE_ROOT + "/" + firestorePath(parts.join("/")) +
+      "?documentId=" + encodeURIComponent(id), { method: "POST", headers, body: JSON.stringify({ fields }) });
+  }
+  if (!response.ok) throw new Error("Firestore medya kaydı HTTP " + response.status);
+}
+
+function mediaScore(match, prediction) {
+  if (!finished(match) || !prediction) return 0;
+  if (Number(prediction.home) === Number(match.homeScore) &&
+      Number(prediction.away) === Number(match.awayScore)) return 3;
+  return Math.sign(Number(prediction.home) - Number(prediction.away)) ===
+    Math.sign(Number(match.homeScore) - Number(match.awayScore)) ? 1 : 0;
+}
+
+function mediaEvents(matches) {
+  const events = [];
+  for (const match of matches) {
+    const home = Number(match.homeScore), away = Number(match.awayScore);
+    const score = match.homeTeam + " " + home + "-" + away + " " + match.awayTeam;
+    if (Math.abs(home - away) >= 4) events.push({ title: "Farklı galibiyet", detail: score });
+    if (home === away) events.push({ title: "Beraberlik", detail: score });
+    const keyEvents = Array.isArray(match.espnKeyEvents) ? match.espnKeyEvents : [];
+    for (const event of keyEvents) {
+      const minute = Number(String(event.minute || "").replace(/\D/g, ""));
+      if (event.kind === "redCard" || event.kind === "ownGoal" ||
+          (event.kind === "goal" && minute >= 85)) {
+        events.push({
+          title: event.kind === "redCard" ? "Kırmızı kart" :
+            event.kind === "ownGoal" ? "Kendi kalesine gol" : "Son dakika golü",
+          detail: String(event.player || event.description || "Maçın kritik anı") +
+            " · " + score + (event.minute ? " · " + event.minute : "")
+        });
+      }
+    }
+  }
+  return events.slice(0, 15);
+}
+
+async function mediaPhotos(match) {
+  const league = String(match.espnLeagueCode || "");
+  const id = String(match.espnId || "");
+  if (!/^[a-z0-9.]+$/i.test(league) || !/^\d{5,20}$/.test(id)) return [];
+  try {
+    const response = await fetch("https://site.api.espn.com/apis/site/v2/sports/soccer/" +
+      league + "/summary?event=" + id);
+    if (!response.ok) return [];
+    const data = await response.json();
+    const result = [];
+    for (const article of (Array.isArray(data.articles) ? data.articles : [])) {
+      for (const image of (Array.isArray(article.images) ? article.images : [])) {
+        const url = typeof image === "string" ? image : image && (image.url || image.href);
+        if (!url || !url.startsWith("https://") || !url.toLowerCase().includes("espn")) continue;
+        result.push({
+          url,
+          alt: String(article.headline || match.homeTeam + " - " + match.awayTeam).slice(0, 140),
+          caption: String(article.headline || match.homeTeam + " - " + match.awayTeam).slice(0, 140),
+          source: "ESPN",
+          sourceUrl: article.links && article.links.web ? (article.links.web.href || "") : ""
+        });
+        if (result.length >= 2) return result;
+      }
+    }
+    return result;
+  } catch (error) {
+    console.warn("ESPN fotoğrafı alınamadı:", id, error);
+    return [];
+  }
+}
+
+async function mediaGenerate(env, prompt, facts) {
+  const result = await env.AI.run(MEDIA_MODEL, {
+    messages: [
+      { role: "system", content: prompt },
+      { role: "user", content: JSON.stringify(facts) }
+    ],
+    temperature: 0.7,
+    chat_template_kwargs: { enable_thinking: false }
+  });
+  let output = result && result.response ? result.response : "";
+  if (Array.isArray(output)) output = output.map(item => item.text || "").join("");
+  output = String(output).trim();
+  const first = output.indexOf("{"), last = output.lastIndexOf("}");
+  if (first < 0 || last <= first) throw new Error("AI geçerli JSON üretmedi.");
+  return JSON.parse(output.slice(first, last + 1));
+}
+
+async function publishDailyGazette(env, code, day, matches, token) {
+  const base = "groups/" + encodeURIComponent(code);
+  const [players, bonuses, photoGroups] = await Promise.all([
+    fsList(base + "/players", token),
+    fsList(base + "/bonusSelections", token),
+    Promise.all(matches.map(mediaPhotos))
+  ]);
+  const bonusIds = new Set(bonuses.map(item => item.matchId).filter(Boolean));
+  const standings = players.map(person => {
+    let points = 0, exact = 0;
+    for (const match of matches) {
+      const basePoints = mediaScore(match, match.predictions && match.predictions[person.id]);
+      if (basePoints === 3) exact++;
+      points += basePoints * (bonusIds.has(match.id) ? 2 : 1);
+    }
+    return { name: person.name || "Oyuncu", points, exact };
+  }).sort((a,b) => b.points - a.points || a.name.localeCompare(b.name, "tr"));
+  const events = mediaEvents(matches);
+  const facts = {
+    date: day,
+    league: code,
+    matches: matches.map(match => ({
+      home: match.homeTeam, away: match.awayTeam,
+      score: String(match.homeScore) + "-" + String(match.awayScore),
+      competition: match.competition || "",
+      events: Array.isArray(match.espnKeyEvents) ? match.espnKeyEvents.slice(0, 8) : []
+    })),
+    playerStandings: standings.slice(0, 8),
+    notableEvents: events
+  };
+  const content = await mediaGenerate(env,
+    "FUTBOLBARBAROS için günlük Türkçe spor gazetesi yaz. Yalnızca verilen JSON gerçeklerini kullan, skor veya olay uydurma. Mizahi, yaratıcı ve saygılı ol. SADECE JSON döndür: {headline,subheadline,lead,stories:[{title,body}],newspaperWar:[{paper,headline,comment}],tomorrowPreview,photoCaptions}. En fazla 4 haber; basın savaşı tam 3 gazete: Barbaros Spor, Futbol Kaosu, Son Dakika. Fotoğraf URL'si üretme.",
+    facts);
+  const photos = photoGroups.flat().slice(0, 6);
+  const captions = Array.isArray(content.photoCaptions) ? content.photoCaptions : [];
+  content.photos = photos.map((photo,index) => ({
+    url: photo.url, alt: photo.alt, source: photo.source, sourceUrl: photo.sourceUrl,
+    caption: String(captions[index] || photo.caption).slice(0, 150)
+  }));
+  content.date = day;
+  content.playerStandings = facts.playerStandings;
+  content.notableEvents = events;
+  content.league = code;
+  await mediaSave(base + "/dailyMedia/current", {
+    date: day, status: "published", payloadJson: JSON.stringify(content),
+    publishedAt: new Date().toISOString()
+  }, token);
+
+  const group = await fsGet(base, token);
+  const seasons = await fsList(base + "/seasons", token);
+  const season = seasons.find(item => item.startDate && item.endDate &&
+    day >= item.startDate && day <= item.endDate) ||
+    seasons.find(item => group && item.id === group.activeSeasonId);
+  if (season) {
+    await mediaSave(base + "/seasonTimeline/" + encodeURIComponent(season.id + "_" + day), {
+      seasonId: season.id, day,
+      eventsJson: JSON.stringify(events),
+      matchesJson: JSON.stringify(facts.matches.map(item => ({
+        home: item.home, away: item.away, score: item.score
+      })))
+    }, token);
+  }
+}
+
+async function publishSeasonDocumentary(env, code, season, fixtures, token) {
+  const base = "groups/" + encodeURIComponent(code);
+  const bonuses = await fsList(base + "/bonusSelections", token);
+  const bonusIds = new Set(bonuses.filter(item =>
+    item.seasonId === season.id ||
+    (!item.seasonId && item.targetDate >= season.startDate && item.targetDate <= season.endDate)
+  ).map(item => item.matchId).filter(Boolean));
+  const riskPoints = await getRiskPoints(code, fixtures, token);
+  const players = await fsList(base + "/players", token);
+  const standings = players.map(person => {
+    const points = fixtures.reduce((sum, match) => {
+      const basePoints = mediaScore(match, match.predictions && match.predictions[person.id]);
+      return sum + basePoints * (bonusIds.has(match.id) ? 2 : 1);
+    }, 0) + (riskPoints.get(person.id) || 0);
+    return { name: person.name || "Oyuncu", points };
+  }).sort((a,b) => b.points - a.points || a.name.localeCompare(b.name, "tr"));
+  const timeline = await fsList(base + "/seasonTimeline", token);
+  const chronology = timeline.filter(item => item.seasonId === season.id)
+    .sort((a,b) => String(a.day).localeCompare(String(b.day)))
+    .map(item => ({
+      day: item.day,
+      events: (() => { try { return JSON.parse(item.eventsJson || "[]"); } catch { return []; } })(),
+      matches: (() => { try { return JSON.parse(item.matchesJson || "[]"); } catch { return []; } })()
+    }));
+  const facts = {
+    league: code,
+    season: { name: season.name || season.id, startDate: season.startDate, endDate: season.endDate },
+    matches: fixtures.map(match => ({
+      home: match.homeTeam, away: match.awayTeam,
+      score: String(match.homeScore) + "-" + String(match.awayScore)
+    })),
+    finalStandings: standings,
+    chronology
+  };
+  const content = await mediaGenerate(env,
+    "FUTBOLBARBAROS sezon belgeselini Türkçe, sinematik, eğlenceli ve saygılı yaz. Gerçek dışı olay veya puan uydurma. SADECE JSON döndür: {title,opening,chapters:[{heading,text}],seasonAwards:[{title,winner,reason}],finale}. 4-6 bölüm, en fazla 5 ödül. Şampiyon ve sonuncuyu finalStandings listesinden belirle; eşitlik varsa birlikte an.",
+    facts);
+  await mediaSave(base + "/seasonDocumentaries/" + encodeURIComponent(season.id), {
+    seasonId: season.id, seasonName: season.name || season.id,
+    status: "published", payloadJson: JSON.stringify(content),
+    publishedAt: new Date().toISOString()
+  }, token);
+}
+
+async function runMediaAutomation(env) {
+  if (!env.AI || !env.FIREBASE_SERVICE_ACCOUNT) return;
+  try {
+    const account = JSON.parse(env.FIREBASE_SERVICE_ACCOUNT);
+    if (account.project_id !== FIREBASE_PROJECT_ID || !account.client_email || !account.private_key) return;
+    const token = await createFirebaseAccessToken(account);
+    const groups = await fsList("groups", token);
+    const today = localDay(new Date());
+    for (const group of groups) {
+      const code = group.id, base = "groups/" + encodeURIComponent(code);
+      try {
+        const matches = await fsList(base + "/matches", token);
+        const todayMatches = matches.filter(match =>
+          fsTime(match.kickoff) && localDay(new Date(fsTime(match.kickoff))) === today);
+        if (todayMatches.length && todayMatches.every(finished)) {
+          const current = await fsGet(base + "/dailyMedia/current", token);
+          if (!(current && current.date === today && current.status === "published")) {
+            const attempted = Date.parse(current && current.attemptedAt || "");
+            const locked = current && current.status === "generating" &&
+              Number.isFinite(attempted) && Date.now() - attempted < 45 * 60 * 1000;
+            const retryWait = current && current.status === "error" &&
+              Number.isFinite(attempted) && Date.now() - attempted < 60 * 60 * 1000;
+            if (!locked && !retryWait) {
+              await mediaSave(base + "/dailyMedia/current", {
+                date: today, status: "generating", attemptedAt: new Date().toISOString()
+              }, token);
+              try {
+                await publishDailyGazette(env, code, today, todayMatches, token);
+                console.log("Günlük gazete yayımlandı:", code, today);
+              } catch (error) {
+                await mediaSave(base + "/dailyMedia/current", {
+                  date: today, status: "error", attemptedAt: new Date().toISOString(),
+                  errorText: String(error.message || error).slice(0, 250)
+                }, token);
+                console.error("Gazete üretim hatası:", code, error);
+              }
+            }
+          }
+        }
+
+        const seasons = await fsList(base + "/seasons", token);
+        for (const season of seasons) {
+          if (!season.startDate || !season.endDate || today < season.endDate) continue;
+          const fixtures = matches.filter(match => {
+            if (match.seasonId) return match.seasonId === season.id;
+            const date = localDay(new Date(fsTime(match.kickoff)));
+            return date >= season.startDate && date <= season.endDate;
+          });
+          if (!fixtures.length || !fixtures.every(finished)) continue;
+          const docPath = base + "/seasonDocumentaries/" + encodeURIComponent(season.id);
+          const existing = await fsGet(docPath, token);
+          if (existing && existing.status === "published") continue;
+          const attempt = Date.parse(existing && existing.attemptedAt || "");
+          if (existing && existing.status === "generating" &&
+              Number.isFinite(attempt) && Date.now() - attempt < 45 * 60 * 1000) continue;
+          try {
+            await mediaSave(docPath, {
+              seasonId: season.id, seasonName: season.name || season.id,
+              status: "generating", attemptedAt: new Date().toISOString()
+            }, token);
+            let unresolved = false;
+            for (const match of fixtures) {
+              const risks = await fsList(base + "/matches/" + encodeURIComponent(match.id) + "/risks", token);
+              if (risks.some(risk => risk.status !== "resolved")) unresolved = true;
+            }
+            if (unresolved) {
+              await mediaSave(docPath, { status: "waiting", attemptedAt: new Date().toISOString() }, token);
+              continue;
+            }
+            await publishSeasonDocumentary(env, code, season, fixtures, token);
+            console.log("Sezon belgeseli Onur Duvarı'na eklendi:", code, season.id);
+          } catch (error) {
+            await mediaSave(docPath, {
+              status: "error", attemptedAt: new Date().toISOString(),
+              errorText: String(error.message || error).slice(0, 250)
+            }, token);
+            console.error("Belgesel üretim hatası:", code, season.id, error);
+          }
+        }
+      } catch (error) {
+        console.error("Medya otomasyonu lig hatası:", code, error);
+      }
+    }
+  } catch (error) {
+    console.error("Medya otomasyonu genel hatası:", error);
+  }
+}
