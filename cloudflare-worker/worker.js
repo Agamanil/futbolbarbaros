@@ -1288,3 +1288,5 @@ async function runAutomaticNotifications(env) {
     console.error("Otomatik bildirim taraması:", error);
   }
 }
+
+// GitHub Builds bağlantısı için otomatik dağıtım doğrulama commit'i.
