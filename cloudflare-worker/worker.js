@@ -1289,4 +1289,4 @@ async function runAutomaticNotifications(env) {
   }
 }
 
-// GitHub Builds bağlantısı için otomatik dağıtım doğrulama commit'i.
+// Cloudflare GitHub otomatik dağıtım testi.
