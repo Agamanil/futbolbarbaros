@@ -2,7 +2,7 @@
 const SITE_ORIGIN = 'https://agamanil.github.io';
 const FIREBASE_PROJECT_ID = 'futbolbarbarosdenemesi';
 const FIREBASE_API_KEY = 'AIzaSyCNpVWp9mughfYhzxV-93xaJ8O7rr_SOGY';
-const FIREBASE_ADMIN_UID = 'owI2wGBR8ncnm2vaiKDdqd6mjWC3';
+const FIREBASE_ADMIN_UID = 'MUxQ8O20qXa5DzWB7LTMMjilJ0Y2';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': SITE_ORIGIN,
