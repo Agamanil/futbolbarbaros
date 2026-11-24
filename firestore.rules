@@ -137,7 +137,10 @@ service cloud.firestore {
 
         allow update: if isAdmin() || (
           isMember(groupId)
-          && request.time < resource.data.kickoff
+          && resource.data.get('predictionOpenAt', null) is timestamp
+          && resource.data.get('predictionCloseAt', null) is timestamp
+          && request.time >= resource.data.predictionOpenAt
+          && request.time < resource.data.predictionCloseAt
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['predictions'])
           && request.resource.data.predictions.diff(resource.data.predictions).affectedKeys().hasOnly([request.auth.uid])
           && request.resource.data.predictions[request.auth.uid].keys().hasOnly(['home', 'away', 'playerName', 'updatedAt'])
