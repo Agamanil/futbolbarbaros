@@ -26,6 +26,7 @@ export default {
 
       const body = await request.clone().json().catch(() => ({}));
 
+      if (body.action === 'adminLogin') return handleAdminLogin(body, env);
       if (body.action === 'createAccountTransfer') return handleCreateAccountTransfer(body, env);
       if (body.action === 'redeemAccountTransfer') return handleRedeemAccountTransfer(body, env);
 
@@ -146,6 +147,73 @@ async function verifyFirebaseIdToken(idToken) {
   }
 
   return user.localId;
+}
+
+function constantTimeStringEqual(a, b) {
+  const left = new TextEncoder().encode(String(a || ""));
+  const right = new TextEncoder().encode(String(b || ""));
+  let diff = left.length ^ right.length;
+  const size = Math.max(left.length, right.length);
+  for (let i = 0; i < size; i++) {
+    diff |= (left[i % (left.length || 1)] || 0) ^ (right[i % (right.length || 1)] || 0);
+  }
+  return diff === 0;
+}
+
+async function createAdminCustomToken(serviceAccount) {
+  const now = Math.floor(Date.now() / 1000);
+  const header = { alg: "RS256", typ: "JWT" };
+  const claims = {
+    iss: serviceAccount.client_email,
+    sub: serviceAccount.client_email,
+    aud: "https://identitytoolkit.googleapis.com/google.identity.identitytoolkit.v1.IdentityToolkit",
+    iat: now,
+    exp: now + 3600,
+    uid: FIREBASE_ADMIN_UID,
+    claims: { admin: true }
+  };
+  const unsigned = base64Url(JSON.stringify(header)) + "." + base64Url(JSON.stringify(claims));
+  const pem = serviceAccount.private_key
+    .replace(/-----BEGIN PRIVATE KEY-----/g, "")
+    .replace(/-----END PRIVATE KEY-----/g, "")
+    .replace(/\\s/g, "");
+  const der = Uint8Array.from(atob(pem), char => char.charCodeAt(0));
+  const key = await crypto.subtle.importKey(
+    "pkcs8",
+    der,
+    { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+  const signature = await crypto.subtle.sign(
+    "RSASSA-PKCS1-v1_5",
+    key,
+    new TextEncoder().encode(unsigned)
+  );
+  return unsigned + "." + base64UrlBytes(new Uint8Array(signature));
+}
+
+async function handleAdminLogin(body, env) {
+  try {
+    if (!env.ADMIN_PANEL_PASSWORD) {
+      throw new Error("Cloudflare ADMIN_PANEL_PASSWORD secret ayarlanmamış.");
+    }
+    if (body.username !== "Agamanil (patron)" ||
+        !constantTimeStringEqual(body.password, env.ADMIN_PANEL_PASSWORD)) {
+      return json({ ok: false, error: "Yönetici adı veya şifre hatalı." }, 401);
+    }
+    if (!env.FIREBASE_SERVICE_ACCOUNT) {
+      throw new Error("Firebase servis hesabı Worker'da ayarlanmamış.");
+    }
+    const account = JSON.parse(env.FIREBASE_SERVICE_ACCOUNT);
+    if (account.project_id !== FIREBASE_PROJECT_ID || !account.client_email || !account.private_key) {
+      throw new Error("Firebase servis hesabı bilgileri geçersiz.");
+    }
+    const customToken = await createAdminCustomToken(account);
+    return json({ ok: true, customToken });
+  } catch (error) {
+    return json({ ok: false, error: error.message || "Yönetici girişi başarısız." }, 500);
+  }
 }
 
 async function getTransferAccessToken(env) {
