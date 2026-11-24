@@ -1,7 +1,7 @@
 // FUTBOLBARBAROS - COKLU LIG + GUNLUK BONUS MAC SISTEMI
 // Firebase Spark (ucretsiz plan) ile calisir. Cloud Functions gerektirmez.
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/13.2.0/firebase-app.js';
-import { getAuth, signInAnonymously, onAuthStateChanged, setPersistence, browserLocalPersistence } from 'https://www.gstatic.com/firebasejs/13.2.0/firebase-auth.js';
+import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, setPersistence, browserLocalPersistence } from 'https://www.gstatic.com/firebasejs/13.2.0/firebase-auth.js';
 import { getIdToken } from 'https://www.gstatic.com/firebasejs/13.2.0/firebase-auth.js';
 import { getMessaging, getToken, isSupported, onMessage } from 'https://www.gstatic.com/firebasejs/13.2.0/firebase-messaging.js';
 import {
@@ -24,7 +24,7 @@ const KNOWN_LEAGUES = [
 
 const KNOWN_LEAGUE_CODES = KNOWN_LEAGUES.map(item => item.code);
 
-let db, uid = null, player = null, groupCode = '';
+let db, auth, uid = null, player = null, groupCode = '';
 let authUser = null, pushMessaging = null, browserPushToken = null, foregroundMessageBound = false;
 let memberships = [], matches = [], players = [], bonusSelections = [], activeMatch = null;
 let leagueCatalog = [];
@@ -36,6 +36,45 @@ let chatMessages = [];
 const MATCH_REACTIONS = ['😂', '😱', '🔥', '💀', '👏', '⚽'];
 
 const isAdmin = () => Boolean(uid) && uid === ADMIN_UID;
+
+// Yönetici girişi: parola Worker tarafında doğrulanır; tarayıcıya parola gömülmez.
+$('showAdminLoginButton')?.addEventListener('click', () => {
+  $('adminLoginMessage').textContent = '';
+  $('adminLoginDialog').showModal();
+});
+$('closeAdminLoginDialog')?.addEventListener('click', () => $('adminLoginDialog').close());
+$('adminLoginForm')?.addEventListener('submit', async event => {
+  event.preventDefault();
+  const button = $('adminLoginSubmit');
+  const status = $('adminLoginMessage');
+  const username = $('adminLoginName').value.trim();
+  const password = $('adminLoginPassword').value;
+  if (!username || !password) return;
+  if (!ESPN_LOOKUP_ENDPOINT.startsWith('https://')) {
+    status.textContent = 'Yönetici sunucusu ayarlanmamış.';
+    return;
+  }
+  button.disabled = true;
+  status.textContent = 'Giriş doğrulanıyor...';
+  try {
+    const response = await fetch(ESPN_LOOKUP_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'adminLogin', username, password })
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || !result.ok || !result.customToken) {
+      throw new Error(result.error || 'Yönetici girişi başarısız.');
+    }
+    await signInWithCustomToken(auth, result.customToken);
+    status.textContent = 'Yönetici oturumu açıldı. Sayfa yenileniyor...';
+    window.location.reload();
+  } catch (error) {
+    status.textContent = error.message || 'Giriş yapılamadı.';
+  } finally {
+    button.disabled = false;
+  }
+});
 
 async function savePushRegistration() {
   if (!db || !uid || !browserPushToken || !memberships.length) return;
@@ -579,7 +618,7 @@ async function boot() {
   }
 
   const app = initializeApp(firebaseConfig);
-  const auth = getAuth(app);
+  auth = getAuth(app);
 
   // Anonim Firebase kimliğini bu tarayıcıda kalıcı tut.
   try {
