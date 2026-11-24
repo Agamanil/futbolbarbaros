@@ -10,7 +10,7 @@ export const firebaseConfig = {
 };
 
 // İlk anonim girişten sonra kendi UID'ni buraya yazacağız.
-export const ADMIN_UID = 'MUxQ8O20qXa5DzWB7LTMMjilJ0Y2';
+export const ADMIN_UID = 'owI2wGBR8ncnm2vaiKDdqd6mjWC3';
 
 // Firebase Cloud Messaging Web Push public VAPID key.
 export const firebaseVapidKey = 'BA4tZ_DV-QggZGZqmDIWH7lJ-WFd7_XLPCPcOxdjdXCfacuKAxSlNN6qCvTZqpnpR6t3iPT0sBtAIxWngm4K3ms';
