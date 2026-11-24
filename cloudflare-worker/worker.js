@@ -170,7 +170,7 @@ async function createAdminCustomToken(serviceAccount) {
     iat: now,
     exp: now + 3600,
     uid: FIREBASE_ADMIN_UID,
-    claims: { admin: true }
+    admin: true
   };
   const unsigned = base64Url(JSON.stringify(header)) + "." + base64Url(JSON.stringify(claims));
   const pem = serviceAccount.private_key
