@@ -176,7 +176,7 @@ async function createAdminCustomToken(serviceAccount) {
   const pem = serviceAccount.private_key
     .replace(/-----BEGIN PRIVATE KEY-----/g, "")
     .replace(/-----END PRIVATE KEY-----/g, "")
-    .replace(/\\s/g, "");
+    .replace(/\s/g, "");
   const der = Uint8Array.from(atob(pem), char => char.charCodeAt(0));
   const key = await crypto.subtle.importKey(
     "pkcs8",
