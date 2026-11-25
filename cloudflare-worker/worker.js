@@ -1510,36 +1510,44 @@ async function runMediaAutomation(env) {
     const token = await createFirebaseAccessToken(account);
     const groups = await fsList("groups", token);
     const today = localDay(new Date());
+    const publicationDays = [previousDay(today), today];
     for (const group of groups) {
       const code = group.id, base = "groups/" + encodeURIComponent(code);
       try {
         const matches = await fsList(base + "/matches", token);
-        const todayMatches = matches.filter(match =>
-          fsTime(match.kickoff) && localDay(new Date(fsTime(match.kickoff))) === today);
-        if (todayMatches.length && todayMatches.every(finished)) {
-          const current = await fsGet(base + "/dailyMedia/current", token);
-          if (!(current && current.date === today && current.status === "published")) {
-            const attempted = Date.parse(current && current.attemptedAt || "");
-            const locked = current && current.status === "generating" &&
-              Number.isFinite(attempted) && Date.now() - attempted < 45 * 60 * 1000;
-            const retryWait = current && current.status === "error" &&
-              Number.isFinite(attempted) && Date.now() - attempted < 60 * 60 * 1000;
-            if (!locked && !retryWait) {
-              await mediaSave(base + "/dailyMedia/current", {
-                date: today, status: "generating", attemptedAt: new Date().toISOString()
-              }, token);
-              try {
-                await publishDailyGazette(env, code, today, todayMatches, token);
-                console.log("Günlük gazete yayımlandı:", code, today);
-              } catch (error) {
-                await mediaSave(base + "/dailyMedia/current", {
-                  date: today, status: "error", attemptedAt: new Date().toISOString(),
-                  errorText: String(error.message || error).slice(0, 250)
-                }, token);
-                console.error("Gazete üretim hatası:", code, error);
-              }
-            }
+        const dailyCandidates = publicationDays.map(day => ({
+          day,
+          matches: matches.filter(match =>
+            fsTime(match.kickoff) && localDay(new Date(fsTime(match.kickoff))) === day)
+        })).filter(item => item.matches.length && item.matches.every(finished));
+
+        const current = await fsGet(base + "/dailyMedia/current", token);
+        for (const candidate of dailyCandidates) {
+          const day = candidate.day;
+          if (current && current.status === "published" && current.date >= day) continue;
+
+          const sameDayAttempt = current && current.date === day;
+          const attempted = Date.parse(sameDayAttempt && current.attemptedAt || "");
+          const locked = sameDayAttempt && current.status === "generating" &&
+            Number.isFinite(attempted) && Date.now() - attempted < 45 * 60 * 1000;
+          const retryWait = sameDayAttempt && current.status === "error" &&
+            Number.isFinite(attempted) && Date.now() - attempted < 60 * 60 * 1000;
+          if (locked || retryWait) continue;
+
+          await mediaSave(base + "/dailyMedia/current", {
+            date: day, status: "generating", attemptedAt: new Date().toISOString()
+          }, token);
+          try {
+            await publishDailyGazette(env, code, day, candidate.matches, token);
+            console.log("Günlük gazete yayımlandı:", code, day);
+          } catch (error) {
+            await mediaSave(base + "/dailyMedia/current", {
+              date: day, status: "error", attemptedAt: new Date().toISOString(),
+              errorText: String(error.message || error).slice(0, 250)
+            }, token);
+            console.error("Gazete üretim hatası:", code, error);
           }
+          break;
         }
 
         const seasons = await fsList(base + "/seasons", token);
