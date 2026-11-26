@@ -1810,11 +1810,11 @@ async function mediaGenerate(env, prompt, facts) {
           {
             role: "system",
             content: attempt === 1 ? prompt :
-              prompt + " Önceki yanıt JSON olarak kesilmiş veya bozuktu. Bu kez yanıtı tamamla ve yalnızca tek, geçerli JSON nesnesi döndür."
+              prompt + "\n\nÖNEMLİ: Önceki yanıt ayrıştırılamadı. Bu kez yalnızca tek bir geçerli JSON nesnesi döndür. Markdown kod çiti (\`\`\`), açıklama, önsöz veya JSON dışı hiçbir karakter kullanma. Tüm metin değerlerinde çift tırnak kullan; sondaki virgülleri kullanma. JSON nesnesini mutlaka tamamla."
           },
           { role: "user", content: JSON.stringify(facts) }
         ],
-        temperature: 0.7,
+        temperature: attempt === 1 ? 0.7 : 0,
         chat_template_kwargs: { enable_thinking: false }
       });
     } catch (error) {
@@ -1839,6 +1839,7 @@ async function mediaGenerate(env, prompt, facts) {
         model: MEDIA_MODEL, source: "AI choices[0].message.content",
         stage: "json-parse", attempt, maxAttempts,
         errorType: String(error?.name || "Error"),
+        errorMessage: String(error?.message || error).slice(0, 240),
         contentLength: content.length,
         fenced: /^\s*```/.test(content),
         hasThinkTag: /<think>/i.test(content)
