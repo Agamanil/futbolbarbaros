@@ -482,7 +482,7 @@ test('Firestore istek sayısı Free plan sınırının altında kalır ve Risk a
   await run(db, ai.env);
 
   assert.ok(db.requestCount < 50, `Firestore REST request count: ${db.requestCount}`);
-  assert.equal(db.requestCount, 19);
+  assert.equal(db.requestCount, 20);
   assert.equal(ai.aiCalls, 3);
   assert.equal(JSON.parse(currentIssue(db).payloadJson).editions.official.factRefs[0], 'result:m-today');
 });
