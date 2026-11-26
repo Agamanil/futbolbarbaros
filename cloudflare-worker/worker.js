@@ -96,7 +96,10 @@ export default {
   },
 
   async scheduled(controller, env, ctx) {
-    ctx.waitUntil(runAutomaticNotifications(env));
+    ctx.waitUntil(Promise.all([
+      runAutomaticNotifications(env),
+      runMediaAutomation(env)
+    ]));
   }
 };
 
