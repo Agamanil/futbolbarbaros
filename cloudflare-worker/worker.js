@@ -38,6 +38,7 @@ export default {
       const body = await request.clone().json().catch(() => ({}));
 
       if (body.action === 'adminLogin') return handleAdminLogin(body, env);
+      if (body.action === 'runMediaAutomation') return handleManualMediaAutomation(body, env);
       if (body.action === 'createAccountTransfer') return handleCreateAccountTransfer(body, env);
       if (body.action === 'redeemAccountTransfer') return handleRedeemAccountTransfer(body, env);
 
@@ -205,6 +206,25 @@ async function createAdminCustomToken(serviceAccount) {
     new TextEncoder().encode(unsigned)
   );
   return unsigned + "." + base64UrlBytes(new Uint8Array(signature));
+}
+
+async function handleManualMediaAutomation(body, env) {
+  try {
+    const uid = await verifyFirebaseIdToken(body.idToken);
+    if (uid !== FIREBASE_ADMIN_UID) {
+      return json({ ok: false, error: "Bu işlemi yalnızca yönetici başlatabilir." }, 403);
+    }
+    if (!env.AI || !env.FIREBASE_SERVICE_ACCOUNT) {
+      return json({ ok: false, error: "Medya otomasyonu için AI binding veya Firebase servis hesabı eksik." }, 500);
+    }
+    const completed = await runMediaAutomation(env);
+    if (!completed) {
+      return json({ ok: false, error: "Otomasyon başlatıldı ancak tamamlanamadı. Worker kayıtlarını kontrol etmek gerekiyor." }, 500);
+    }
+    return json({ ok: true, message: "Medya otomasyonu manuel olarak çalıştırıldı. Yayın koşulları uygun içerikler otomatik yayımlanır." });
+  } catch (error) {
+    return json({ ok: false, error: error.message || "Manuel tetikleme başarısız." }, 500);
+  }
 }
 
 async function handleAdminLogin(body, env) {
@@ -2172,7 +2192,7 @@ export async function runMediaAutomation(env) {
     console.error("Medya otomasyonu durduruldu: gerekli binding veya secret eksik.", {
       hasAI, hasServiceAccount
     });
-    return;
+    return false;
   }
   let stage = "firebase-service-account-json";
   try {
@@ -2190,10 +2210,12 @@ export async function runMediaAutomation(env) {
     stage = "firestore-groups-response";
     await runMediaAutomationForToken(env, token, new Date());
     console.log("Medya otomasyonu tamamlandı.");
+    return true;
   } catch (error) {
     console.error("Medya otomasyonu genel hatası:", error, {
       stage, errorType: String(error?.name || "Error")
     });
+    return false;
   }
 }
 
