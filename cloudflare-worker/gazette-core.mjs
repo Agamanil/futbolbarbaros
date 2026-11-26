@@ -86,12 +86,12 @@ export function shouldSkipGazetteGeneration(date, current, lock, now = Date.now(
     const leaseUntil = Date.parse(lock.leaseUntil || '');
     const attemptedAt = Date.parse(lock.attemptedAt || '');
     if ((Number.isFinite(leaseUntil) && leaseUntil > now) ||
-        (!Number.isFinite(leaseUntil) && Number.isFinite(attemptedAt) && now - attemptedAt < 45 * 60 * 1000)) return true;
+        (!Number.isFinite(leaseUntil) && Number.isFinite(attemptedAt) && now - attemptedAt < 14 * 60 * 1000)) return true;
   }
   if (lock?.status === 'error') {
     const attemptedAt = Date.parse(lock.attemptedAt || '');
     if (String(lock.date || '') <= date && Number.isFinite(attemptedAt) &&
-        now - attemptedAt < 60 * 60 * 1000) return true;
+        now - attemptedAt < 15 * 60 * 1000) return true;
   }
   return false;
 }
