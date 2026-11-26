@@ -23,7 +23,7 @@ const corsHeaders = {
 };
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
     if (request.method === 'OPTIONS') {
@@ -38,7 +38,7 @@ export default {
       const body = await request.clone().json().catch(() => ({}));
 
       if (body.action === 'adminLogin') return handleAdminLogin(body, env);
-      if (body.action === 'runMediaAutomation') return handleManualMediaAutomation(body, env);
+      if (body.action === 'runMediaAutomation') return handleManualMediaAutomation(body, env, ctx);
       if (body.action === 'createAccountTransfer') return handleCreateAccountTransfer(body, env);
       if (body.action === 'redeemAccountTransfer') return handleRedeemAccountTransfer(body, env);
 
@@ -208,7 +208,7 @@ async function createAdminCustomToken(serviceAccount) {
   return unsigned + "." + base64UrlBytes(new Uint8Array(signature));
 }
 
-async function handleManualMediaAutomation(body, env) {
+async function handleManualMediaAutomation(body, env, ctx) {
   try {
     const uid = await verifyFirebaseIdToken(body.idToken);
     if (uid !== FIREBASE_ADMIN_UID) {
@@ -217,11 +217,17 @@ async function handleManualMediaAutomation(body, env) {
     if (!env.AI || !env.FIREBASE_SERVICE_ACCOUNT) {
       return json({ ok: false, error: "Medya otomasyonu için AI binding veya Firebase servis hesabı eksik." }, 500);
     }
-    const completed = await runMediaAutomation(env);
-    if (!completed) {
-      return json({ ok: false, error: "Otomasyon başlatıldı ancak tamamlanamadı. Worker kayıtlarını kontrol etmek gerekiyor." }, 500);
+    if (!ctx || typeof ctx.waitUntil !== "function") {
+      return json({ ok: false, error: "Worker arka plan çalıştırma bağlamı bulunamadı." }, 500);
     }
-    return json({ ok: true, message: "Medya otomasyonu manuel olarak çalıştırıldı. Yayın koşulları uygun içerikler otomatik yayımlanır." });
+    ctx.waitUntil(
+      runMediaAutomation(env).then(completed => {
+        if (!completed) console.error("Yönetici tarafından başlatılan medya otomasyonu başarısız tamamlandı.");
+      }).catch(error => {
+        console.error("Yönetici medya otomasyonu arka plan hatası:", error);
+      })
+    );
+    return json({ ok: true, message: "Otomasyon arka planda başlatıldı. Yayın koşulları uygun içerikler otomatik yayımlanacak." }, 202);
   } catch (error) {
     return json({ ok: false, error: error.message || "Manuel tetikleme başarısız." }, 500);
   }
