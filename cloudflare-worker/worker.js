@@ -1547,7 +1547,9 @@ async function acquireGazetteGenerationLock(base, day, token, now = Date.now(), 
 
   const attemptId = crypto.randomUUID();
   const startedAt = new Date(now);
-  const leaseUntil = new Date(now + 45 * 60 * 1000);
+  // Cron invocations have a 15-minute wall-time ceiling. Expire the lease
+  // before the next 15-minute schedule so a terminated run cannot block recovery.
+  const leaseUntil = new Date(now + 14 * 60 * 1000);
   const fields = {
     date: fsWrite(day),
     status: fsWrite("generating"),
@@ -1577,7 +1579,8 @@ async function finishGazetteGenerationLock(base, day, attemptId, error, token, n
   if (lock.date !== day || lock.status !== "generating" || lock.attemptId !== attemptId) return;
   const fields = {
     status: fsWrite("error"),
-    attemptedAt: fsWrite(new Date(now).toISOString()),
+    // Record the actual failure time, not the invocation start time.
+    attemptedAt: fsWrite(new Date().toISOString()),
     leaseUntil: fsWrite(""),
     errorText: fsWrite(error ? String(error.message || error).slice(0, 250) : "")
   };
