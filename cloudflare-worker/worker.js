@@ -2128,15 +2128,31 @@ async function publishSeasonDocumentary(env, code, season, fixtures, token, cont
 }
 
 export async function runMediaAutomation(env) {
-  if (!env.AI || !env.FIREBASE_SERVICE_ACCOUNT) return;
+  const hasAI = Boolean(env.AI);
+  const hasServiceAccount = Boolean(env.FIREBASE_SERVICE_ACCOUNT);
+  console.log("Medya otomasyonu başladı.", { hasAI, hasServiceAccount });
+  if (!hasAI || !hasServiceAccount) {
+    console.error("Medya otomasyonu durduruldu: gerekli binding veya secret eksik.", {
+      hasAI, hasServiceAccount
+    });
+    return;
+  }
   let stage = "firebase-service-account-json";
   try {
     const account = JSON.parse(env.FIREBASE_SERVICE_ACCOUNT);
-    if (account.project_id !== FIREBASE_PROJECT_ID || !account.client_email || !account.private_key) return;
+    if (account.project_id !== FIREBASE_PROJECT_ID || !account.client_email || !account.private_key) {
+      console.error("Medya otomasyonu durduruldu: Firebase servis hesabı bilgileri geçersiz.", {
+        projectMatches: account.project_id === FIREBASE_PROJECT_ID,
+        hasClientEmail: Boolean(account.client_email),
+        hasPrivateKey: Boolean(account.private_key)
+      });
+      return;
+    }
     stage = "oauth-token-response";
     const token = await createFirebaseAccessToken(account);
     stage = "firestore-groups-response";
     await runMediaAutomationForToken(env, token, new Date());
+    console.log("Medya otomasyonu tamamlandı.");
   } catch (error) {
     console.error("Medya otomasyonu genel hatası:", error, {
       stage, errorType: String(error?.name || "Error")
@@ -2165,6 +2181,10 @@ export async function runMediaAutomationForToken(env, token, nowDate = new Date(
         await new Promise(resolve => setTimeout(resolve, 200));
       }
     }
+    console.log("Medya otomasyonu: Firestore ligleri alındı.", {
+      groupCount: groups.length,
+      maxGroupsInspected: MAX_GROUPS_INSPECTED_PER_MEDIA_RUN
+    });
     const today = localDay(nowDate);
     const publicationDays = gazetteDateWindow(today, DAILY_GAZETTE_BACKFILL_DAYS);
     const now = nowDate.getTime();
@@ -2191,6 +2211,12 @@ export async function runMediaAutomationForToken(env, token, nowDate = new Date(
 
         let timelineBlocked = false;
         let dailyAttempted = false;
+        console.log("Gazete kontrolü:", {
+          group: code,
+          matchCount: matches.length,
+          seasonCount: seasons.length,
+          eligibleDateCount: dailyCandidates.length
+        });
         for (const candidate of dailyCandidates) {
           const day = candidate.day;
           if (current && current.status === "published" && String(current.date || "") >= day) continue;
@@ -2199,7 +2225,15 @@ export async function runMediaAutomationForToken(env, token, nowDate = new Date(
           if (shouldSkipGazetteGeneration(day, null, lock, now)) break;
 
           const riskEvents = await gazetteRiskFactsForMatches(code, candidate.matches, token, riskCache);
-          if (!gazetteDayIsReady(candidate.matches, riskEvents, now)) break;
+          if (!gazetteDayIsReady(candidate.matches, riskEvents, now)) {
+            console.log("Gazete henüz hazır değil:", {
+              group: code,
+              date: day,
+              matchCount: candidate.matches.length,
+              riskEventCount: riskEvents.length
+            });
+            break;
+          }
           const attemptId = await acquireGazetteGenerationLock(base, day, token, now, lockRaw);
           if (!attemptId) break;
           dailyAttempted = true;
