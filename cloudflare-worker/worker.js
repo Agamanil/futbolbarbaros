@@ -1472,7 +1472,8 @@ async function acquireSeasonDocumentaryLock(base, seasonId, token, now = Date.no
     status: fsWrite("generating"),
     attemptId: fsWrite(attemptId),
     attemptedAt: fsWrite(attemptedAt),
-    leaseUntil: fsWrite(new Date(now + 45 * 60 * 1000).toISOString()),
+    // Worker Cron çalışması en fazla 15 dakika sürer; zaman aşımında sonraki Cron kilidi devralabilsin.
+    leaseUntil: fsWrite(new Date(now + 14 * 60 * 1000).toISOString()),
     errorText: fsWrite("")
   };
   const documentFields = mediaDocumentFields({
