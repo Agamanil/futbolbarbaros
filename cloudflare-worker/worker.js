@@ -1597,30 +1597,62 @@ async function commitGazetteAndLock(base, day, attemptId, currentValues, token, 
     firestoreGetRaw(currentPath, token),
     firestoreGetRaw(lockPath, token)
   ]);
-  if (!lockRaw) return false;
+
+  const checkedAt = Date.now();
+
+  if (!lockRaw) {
+    console.error("Gazete yayımlama kontrolü başarısız: kilit bulunamadı.", {
+      day, attemptId
+    });
+    return false;
+  }
+
   const lock = fsFields(lockRaw.fields || {});
   const leaseUntil = Date.parse(lock.leaseUntil || "");
-  if (lock.date !== day || lock.status !== "generating" || lock.attemptId !== attemptId ||
-      !Number.isFinite(leaseUntil) || leaseUntil <= now) return false;
+
+  if (lock.date !== day || lock.status !== "generating" ||
+      lock.attemptId !== attemptId ||
+      !Number.isFinite(leaseUntil) || leaseUntil <= checkedAt) {
+    console.error("Gazete yayımlama kontrolü başarısız: kilit uyuşmazlığı.", {
+      day,
+      expectedAttemptId: attemptId,
+      actualAttemptId: lock.attemptId,
+      lockDate: lock.date,
+      lockStatus: lock.status,
+      leaseUntil: lock.leaseUntil,
+      checkedAt: new Date(checkedAt).toISOString()
+    });
+    return false;
+  }
 
   const current = currentRaw ? fsFields(currentRaw.fields || {}) : null;
+
   if (current && (String(current.date || "") > day ||
-      (current.date === day && current.status === "published"))) return false;
+      (current.date === day && current.status === "published"))) {
+    console.error("Gazete yayımlama kontrolü başarısız: daha yeni gazete mevcut.", {
+      day,
+      currentDate: current.date,
+      currentStatus: current.status
+    });
+    return false;
+  }
 
   const currentFields = mediaDocumentFields(currentValues);
   const lockFields = {
     date: fsWrite(day),
     status: fsWrite("published"),
-    attemptedAt: fsWrite(new Date(now).toISOString()),
+    attemptedAt: fsWrite(new Date(checkedAt).toISOString()),
     leaseUntil: fsWrite(""),
     errorText: fsWrite("")
   };
+
   await firestoreCommit([
     currentRaw
       ? writePatch(currentRaw, currentFields, Object.keys(currentFields))
       : writeCreate(currentPath, currentFields),
     writePatch(lockRaw, lockFields, Object.keys(lockFields))
   ], token);
+
   return true;
 }
 
