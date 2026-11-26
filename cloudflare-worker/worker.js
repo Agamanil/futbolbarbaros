@@ -2218,12 +2218,27 @@ export async function runMediaAutomationForToken(env, token, nowDate = new Date(
           seasonCount: seasons.length,
           eligibleDateCount: dailyCandidates.length
         });
+        if (!dailyCandidates.length) {
+          console.log("Gazete adayı bulunamadı:", { group: code, today, publicationDays });
+        }
         for (const candidate of dailyCandidates) {
           const day = candidate.day;
-          if (current && current.status === "published" && String(current.date || "") >= day) continue;
+          if (current && current.status === "published" && String(current.date || "") >= day) {
+            console.log("Gazete mevcut yayın nedeniyle atlandı:", {
+              group: code, candidateDate: day, publishedDate: current.date
+            });
+            continue;
+          }
           const lockRaw = await firestoreGetRaw(gazetteLockPath(base), token);
           const lock = lockRaw ? fsFields(lockRaw.fields || {}) : null;
-          if (shouldSkipGazetteGeneration(day, null, lock, now)) break;
+          if (shouldSkipGazetteGeneration(day, null, lock, now)) {
+            console.log("Gazete üretim kilidi nedeniyle atlandı:", {
+              group: code, date: day, lockDate: lock?.date || null,
+              lockStatus: lock?.status || null, attemptedAt: lock?.attemptedAt || null,
+              leaseUntil: lock?.leaseUntil || null, errorText: lock?.errorText || null
+            });
+            break;
+          }
 
           const riskEvents = await gazetteRiskFactsForMatches(code, candidate.matches, token, riskCache);
           if (!gazetteDayIsReady(candidate.matches, riskEvents, now)) {
@@ -2231,10 +2246,20 @@ export async function runMediaAutomationForToken(env, token, nowDate = new Date(
               group: code,
               date: day,
               matchCount: candidate.matches.length,
-              riskEventCount: riskEvents.length
+              riskEventCount: riskEvents.length,
+              matches: candidate.matches.map(match => ({
+                id: match.id, kickoff: match.kickoff, espnState: match.espnState || null,
+                scoreSource: match.scoreSource || null,
+                manualResultConfirmed: match.manualResultConfirmed === true,
+                validScore: gazetteScoreIsValid(match)
+              })),
+              riskStatuses: riskEvents.map(event => ({
+                matchId: event.matchId, status: event.status, outcome: event.outcome
+              }))
             });
             break;
           }
+          console.log("Gazete üretimine geçiliyor:", { group: code, date: day, matchCount: candidate.matches.length });
           const attemptId = await acquireGazetteGenerationLock(base, day, token, now, lockRaw);
           if (!attemptId) break;
           dailyAttempted = true;
