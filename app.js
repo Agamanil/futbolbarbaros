@@ -161,6 +161,19 @@ async function setupPushNotifications() {
   }
 }
 
+async function runAdminMediaAutomation() {
+  if (!isAdmin() || !authUser) throw new Error('Yönetici yetkisi gerekli.');
+  const idToken = await getIdToken(authUser);
+  const response = await fetch(ESPN_LOOKUP_ENDPOINT, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'runMediaAutomation', idToken })
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok || !result.ok) throw new Error(result.error || 'Medya otomasyonu çalıştırılamadı.');
+  return result;
+}
+
 async function sendAdminPushNotification() {
   if (!isAdmin()) throw new Error('Yönetici yetkisi gerekli.');
   const title = $('pushNotificationTitle')?.value.trim() || '';
@@ -2513,6 +2526,22 @@ setInterval(() => {
     renderBonusPanel();
   }
 }, 15000);
+
+$('runMediaAutomationButton')?.addEventListener('click', async () => {
+  const button = $('runMediaAutomationButton');
+  const status = $('runMediaAutomationMessage');
+  button.disabled = true;
+  message(status, 'Gazete ve sezon belgeseli otomasyonu çalıştırılıyor...', false);
+  try {
+    const result = await runAdminMediaAutomation();
+    message(status, result.message || 'Otomasyon çalıştırıldı. Yayın koşulları kontrol edildi.', false);
+  } catch (err) {
+    console.error('Manuel medya otomasyonu hatası:', err);
+    message(status, err.message || 'Otomasyon çalıştırılamadı.');
+  } finally {
+    button.disabled = false;
+  }
+});
 
 $('sendPushNotificationButton')?.addEventListener('click', async () => {
   const button = $('sendPushNotificationButton');
