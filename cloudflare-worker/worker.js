@@ -2232,10 +2232,15 @@ export async function runMediaAutomationForToken(env, token, nowDate = new Date(
       const code = group.id, base = "groups/" + encodeURIComponent(code);
       try {
         let current = await fsGet(base + "/dailyMedia/current", token);
+        let timelineBlocked = false;
         if (current && ["pending", "error"].includes(current.timelineStatus)) {
           const timelineReady = await retryCurrentGazetteTimeline(base, current, token, now);
-          if (!timelineReady) continue;
-          current = await fsGet(base + "/dailyMedia/current", token);
+          if (!timelineReady) {
+            timelineBlocked = true;
+            console.error("Gazete zaman çizelgesi bekliyor; sezon belgeseli bağımsız olarak kontrol edilecek:", code);
+          } else {
+            current = await fsGet(base + "/dailyMedia/current", token);
+          }
         }
 
         const matches = await fsList(base + "/matches", token);
@@ -2245,8 +2250,6 @@ export async function runMediaAutomationForToken(env, token, nowDate = new Date(
           matches: gazetteMatchesForDay(matches, day)
         })).filter(item => item.matches.length);
 
-        let timelineBlocked = false;
-        let dailyAttempted = false;
         console.log("Gazete kontrolü:", {
           group: code,
           matchCount: matches.length,
@@ -2257,6 +2260,7 @@ export async function runMediaAutomationForToken(env, token, nowDate = new Date(
           console.log("Gazete adayı bulunamadı:", { group: code, today, publicationDays });
         }
         for (const candidate of dailyCandidates) {
+          if (timelineBlocked) break;
           const day = candidate.day;
           if (current && current.status === "published" && String(current.date || "") >= day) {
             console.log("Gazete mevcut yayın nedeniyle atlandı:", {
@@ -2297,7 +2301,6 @@ export async function runMediaAutomationForToken(env, token, nowDate = new Date(
           console.log("Gazete üretimine geçiliyor:", { group: code, date: day, matchCount: candidate.matches.length });
           const attemptId = await acquireGazetteGenerationLock(base, day, token, now, lockRaw);
           if (!attemptId) break;
-          dailyAttempted = true;
           try {
             const generated = await publishDailyGazette(
               env, code, day, matches, candidate.matches, riskEvents, token, now,
@@ -2323,9 +2326,8 @@ export async function runMediaAutomationForToken(env, token, nowDate = new Date(
           break;
         }
 
-        if (timelineBlocked) continue;
-        if (dailyAttempted) break;
-
+        // Günlük gazete ve sezon belgeseli bağımsız yayın akışlarıdır.
+        // Gazete üretimi veya zaman çizelgesi hata verse bile sezon kapanışı kontrol edilir.
         let seasonAttempted = false;
         for (const season of seasons) {
           if (!season.startDate || !season.endDate || today < season.endDate) continue;
