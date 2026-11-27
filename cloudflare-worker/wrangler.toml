@@ -7,3 +7,14 @@ binding = "AI"
 
 [triggers]
 crons = ["*/15 * * * *"]
+
+[[queues.producers]]
+binding = "MEDIA_AUTOMATION_QUEUE"
+queue = "futbolbarbaros-media-automation"
+
+[[queues.consumers]]
+queue = "futbolbarbaros-media-automation"
+max_batch_size = 1
+max_batch_timeout = 5
+max_retries = 3
+dead_letter_queue = "futbolbarbaros-media-automation-dlq"
