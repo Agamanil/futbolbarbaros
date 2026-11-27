@@ -38,7 +38,7 @@ export default {
       const body = await request.clone().json().catch(() => ({}));
 
       if (body.action === 'adminLogin') return handleAdminLogin(body, env);
-      if (body.action === 'runMediaAutomation') return handleManualMediaAutomation(body, env, ctx);
+      if (body.action === 'runMediaAutomation') return handleManualMediaAutomation(body, env);
       if (body.action === 'createAccountTransfer') return handleCreateAccountTransfer(body, env);
       if (body.action === 'redeemAccountTransfer') return handleRedeemAccountTransfer(body, env);
 
@@ -101,6 +101,32 @@ export default {
       runAutomaticNotifications(env),
       runMediaAutomation(env)
     ]));
+  },
+
+  async queue(batch, env) {
+    for (const message of batch.messages) {
+      if (message.body?.type !== "runMediaAutomation") {
+        console.warn("Bilinmeyen medya kuyruğu mesajı atlandı.");
+        message.ack();
+        continue;
+      }
+      try {
+        console.log("Kuyruktan medya otomasyonu başlatıldı.", {
+          requestedAt: message.body.requestedAt || null
+        });
+        const completed = await runMediaAutomation(env);
+        if (completed === true) {
+          console.log("Kuyruktan medya otomasyonu tamamlandı.");
+          message.ack();
+        } else {
+          console.error("Kuyruktan medya otomasyonu tamamlanamadı; yeniden denenecek.");
+          message.retry({ delaySeconds: 60 });
+        }
+      } catch (error) {
+        console.error("Medya kuyruğu işleme hatası:", error);
+        message.retry({ delaySeconds: 60 });
+      }
+    }
   }
 };
 
@@ -208,7 +234,7 @@ async function createAdminCustomToken(serviceAccount) {
   return unsigned + "." + base64UrlBytes(new Uint8Array(signature));
 }
 
-async function handleManualMediaAutomation(body, env, ctx) {
+async function handleManualMediaAutomation(body, env) {
   try {
     const uid = await verifyFirebaseIdToken(body.idToken);
     if (uid !== FIREBASE_ADMIN_UID) {
@@ -217,18 +243,18 @@ async function handleManualMediaAutomation(body, env, ctx) {
     if (!env.AI || !env.FIREBASE_SERVICE_ACCOUNT) {
       return json({ ok: false, error: "Medya otomasyonu için AI binding veya Firebase servis hesabı eksik." }, 500);
     }
-    if (!ctx || typeof ctx.waitUntil !== "function") {
-      return json({ ok: false, error: "Worker arka plan çalıştırma bağlamı bulunamadı." }, 500);
+    if (!env.MEDIA_AUTOMATION_QUEUE || typeof env.MEDIA_AUTOMATION_QUEUE.send !== "function") {
+      return json({ ok: false, error: "Medya otomasyon kuyruğu Worker'a bağlanmamış." }, 503);
     }
-    ctx.waitUntil(
-      runMediaAutomation(env).then(completed => {
-        if (!completed) console.error("Yönetici tarafından başlatılan medya otomasyonu başarısız tamamlandı.");
-      }).catch(error => {
-        console.error("Yönetici medya otomasyonu arka plan hatası:", error);
-      })
-    );
-    return json({ ok: true, message: "Otomasyon arka planda başlatıldı. Yayın koşulları uygun içerikler otomatik yayımlanacak." }, 202);
+    await env.MEDIA_AUTOMATION_QUEUE.send({
+      type: "runMediaAutomation",
+      requestedAt: new Date().toISOString(),
+      requestedBy: uid
+    });
+    console.log("Yönetici medya otomasyonu kuyruğa eklendi.");
+    return json({ ok: true, queued: true, message: "Otomasyon kuyruğa eklendi. Worker işlemi arka planda tamamlayacak." }, 202);
   } catch (error) {
+    console.error("Manuel medya otomasyonu kuyruğa eklenemedi:", error);
     return json({ ok: false, error: error.message || "Manuel tetikleme başarısız." }, 500);
   }
 }
